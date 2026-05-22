@@ -1,0 +1,9 @@
+Generated from the user-provided already-pixel-art image URL.
+
+See:
+- assets/source/frieren-pixel-source.jpg
+- assets/frieren-pixel-32.png
+- assets/frieren-pixel.png
+- assets/frieren-pixel-generated.txt
+
+The extension embeds the generated 32x32, 32-color palette/rows from assets/frieren-pixel-generated.txt.

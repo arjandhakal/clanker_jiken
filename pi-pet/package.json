@@ -1,0 +1,11 @@
+{
+  "name": "pi-pet",
+  "version": "0.1.0",
+  "description": "A cute pixel-art pet widget for the pi coding agent.",
+  "keywords": ["pi-package", "pi", "extension", "pet", "pixel-art"],
+  "type": "module",
+  "pi": {
+    "extensions": ["./extensions/pi-pet/index.ts"]
+  },
+  "dependencies": {}
+}

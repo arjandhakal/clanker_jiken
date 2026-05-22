@@ -1,0 +1,16 @@
+{
+  "name": "pi-yt-dlp",
+  "version": "0.1.0",
+  "description": "Pi extension for understanding, transcribing, downloading, and playing YouTube videos/playlists with yt-dlp and ffmpeg.",
+  "type": "module",
+  "keywords": ["pi-package", "pi", "yt-dlp", "youtube", "ffmpeg", "transcript"],
+  "pi": {
+    "extensions": ["./extensions"],
+    "skills": ["./skills"]
+  },
+  "peerDependencies": {
+    "@mariozechner/pi-coding-agent": "*",
+    "@mariozechner/pi-ai": "*",
+    "typebox": "*"
+  }
+}
