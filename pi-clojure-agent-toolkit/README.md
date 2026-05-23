@@ -30,6 +30,9 @@ brew install borkdude/brew/babashka
 brew install zprint || true
 # Optional alternative formatter
 brew install cljfmt || true
+
+# Optional profiling support for clj_repl_profile
+brew install async-profiler graphviz
 ```
 
 Start an nREPL that writes `.nrepl-port`. Example deps.edn alias:
@@ -67,12 +70,21 @@ echo 1667 > .nrepl-port
 
 This lets the agent verify behavior in the same running app REPL instead of guessing.
 
+### Project understanding and developer experience
+
+- `clj_project_overview` — scans Clojure files and summarizes namespaces, defs, tests, internal dependency edges, `tap>` instrumentation, TODO/FIXME markers, likely pain points, and next debugging moves.
+- `clj_cider_info` — uses cider-nrepl's `info` op, when available, for richer docs/source metadata.
+
+Use these at the start of a task when the user wants to understand project architecture, data flow, function boundaries, design decisions, or risky areas before changing code.
+
 ### Data debugging and tracing
 
 - `clj_repl_tap_collect` — temporarily installs `add-tap`, evaluates an expression, and returns every `tap>` value plus the final result.
 - `clj_repl_trace` — temporarily wraps selected fully-qualified vars with `with-redefs`, evaluates an expression, and returns call/return/throw events with args and values.
 - `clj_repl_inspect_var` — resolves a var and returns arglists, docstring, metadata, source file/line, value class, and a safe value preview.
 - `clj_repl_macroexpand` — macroexpand one form in the target namespace.
+- `clj_portal_open` — opens Portal from the live REPL and optionally registers it as a `tap>` target.
+- `clj_portal_tap` — evaluates an expression, submits the value through `tap>`, and returns it to pi too.
 
 Examples of things the agent can ask the REPL:
 
@@ -107,6 +119,7 @@ After raw `edit`/`write` to `.clj`, `.cljs`, `.cljc`, or `.edn`, the extension r
 ### Optional debug/profiling ecosystem checks
 
 - `clj_debug_toolkit_status` — checks whether optional libraries are present in the live REPL and prints install guidance when missing.
+- `clj_repl_profile` — profiles a Clojure expression with `clj-async-profiler` and returns generated collapsed-stack/flamegraph files.
 
 Useful optional libraries:
 
@@ -129,7 +142,10 @@ If the agent tries to use a missing optional dependency, the tool output include
 1. Read relevant files.
 2. Use `clj_repl_inspect_var` and `clj_repl_macroexpand` to understand behavior.
 3. Use `clj_repl_tap_collect` or `clj_repl_trace` to follow data through the running system.
-4. Edit with `clj_replace_top_level_form` where possible.
-5. Run `clj_repl_require_reload`.
-6. Run focused `clj_repl_run_test`.
-7. Run `clj_lint`, `clj_format`, and broader `clj_run_tests`.
+4. Use `clj_project_overview` to explain namespaces, architecture, test coverage, data-flow hooks, and likely pain points to the user.
+5. If visual inspection helps, use `clj_portal_open` and `clj_portal_tap`.
+6. Edit with `clj_replace_top_level_form` where possible.
+7. Run `clj_repl_require_reload`.
+8. Run focused `clj_repl_run_test`.
+9. Run `clj_lint`, `clj_format`, and broader `clj_run_tests`.
+10. If performance matters, use `clj_repl_profile` on a specific hot path and inspect the generated flamegraph.

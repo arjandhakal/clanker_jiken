@@ -171,6 +171,18 @@ async function evalClojureTool(cwd: string, code: string, ns = "user", port?: nu
   return { msgs, summary, isError: summary.status.includes("eval-error") || summary.status.includes("error") };
 }
 
+type CljFileSummary = {
+  file: string;
+  ns?: string;
+  requires: string[];
+  defs: { kind: string; name: string; line: number }[];
+  taps: number;
+  todos: { line: number; text: string }[];
+};
+
+const CLJ_EXTS = new Set([".clj", ".cljc", ".cljs"]);
+const IGNORED_DIRS = new Set([".git", ".clj-kondo", ".lsp", ".cpcache", "target", "node_modules", ".shadow-cljs"]);
+
 const OPTIONAL_DEBUG_TOOLS = [
   {
     name: "cider-nrepl",
@@ -223,6 +235,83 @@ const OPTIONAL_DEBUG_TOOLS = [
     install: "Add org.clojure/tools.trace to a dev alias, then use trace-vars/trace-ns for function call tracing."
   }
 ];
+
+async function walkCljFiles(root: string, maxFiles = 400) {
+  const files: string[] = [];
+  async function walk(dir: string) {
+    if (files.length >= maxFiles) return;
+    let entries: fssync.Dirent[] = [];
+    try { entries = await fs.readdir(dir, { withFileTypes: true }); } catch { return; }
+    for (const e of entries) {
+      if (files.length >= maxFiles) return;
+      if (e.isDirectory()) {
+        if (!IGNORED_DIRS.has(e.name)) await walk(path.join(dir, e.name));
+      } else if (e.isFile() && CLJ_EXTS.has(path.extname(e.name))) {
+        files.push(path.join(dir, e.name));
+      }
+    }
+  }
+  await walk(root);
+  return files;
+}
+
+function summarizeCljFile(abs: string, cwd: string, src: string): CljFileSummary {
+  const rel = path.relative(cwd, abs);
+  const lines = src.split(/\r?\n/);
+  const ns = src.match(/\(ns\s+([^\s\)\[\{]+)/)?.[1];
+  const requires = [...src.matchAll(/\[\s*([a-zA-Z0-9_.$!?*+<>=\/-]+)(?:\s+:as\s+([a-zA-Z0-9_.$!?*+<>=\/-]+))?/g)]
+    .map(m => m[1])
+    .filter(r => r.includes("."));
+  const defs: CljFileSummary["defs"] = [];
+  const todos: CljFileSummary["todos"] = [];
+  lines.forEach((line, idx) => {
+    const def = line.match(/^\s*\((defn?|defn-|defmacro|defmulti|defmethod|defprotocol|defrecord|deftype|deftest|defonce)\s+([^\s\)\[]+)/);
+    if (def) defs.push({ kind: def[1], name: def[2], line: idx + 1 });
+    if (/TODO|FIXME|HACK|XXX/i.test(line)) todos.push({ line: idx + 1, text: line.trim() });
+  });
+  return { file: rel, ns, requires: [...new Set(requires)].sort(), defs, taps: (src.match(/(?:^|[^\w-])tap>/g) ?? []).length, todos };
+}
+
+async function projectSummary(cwd: string, maxFiles = 400) {
+  const files = await walkCljFiles(cwd, maxFiles);
+  const summaries: CljFileSummary[] = [];
+  for (const file of files) {
+    const src = await fs.readFile(file, "utf8");
+    summaries.push(summarizeCljFile(file, cwd, src));
+  }
+  return summaries.sort((a, b) => a.file.localeCompare(b.file));
+}
+
+function projectOverviewText(summaries: CljFileSummary[], cwd: string) {
+  const nsByName = new Map(summaries.filter(s => s.ns).map(s => [s.ns!, s]));
+  const prod = summaries.filter(s => !/(^|\/)(test|tests)\//.test(s.file));
+  const tests = summaries.filter(s => /(^|\/)(test|tests)\//.test(s.file) || s.defs.some(d => d.kind === "deftest"));
+  const edges = summaries.flatMap(s => s.ns ? s.requires.filter(r => nsByName.has(r)).map(r => `${s.ns} -> ${r}`) : []);
+  const tapFiles = summaries.filter(s => s.taps > 0);
+  const todos = summaries.flatMap(s => s.todos.map(t => `${s.file}:${t.line}: ${t.text}`));
+  const hotNamespaces = [...summaries].sort((a, b) => b.defs.length - a.defs.length).slice(0, 12);
+  const out = [
+    `Clojure project overview for ${cwd}`,
+    `files: ${summaries.length} (${prod.length} source-ish, ${tests.length} test-ish)`,
+    "",
+    "Namespaces and public surface:",
+    ...hotNamespaces.map(s => `- ${s.ns ?? "<no ns>"} (${s.file}) defs=${s.defs.length}${s.taps ? ` tap>${s.taps}` : ""}\n  ${s.defs.slice(0, 18).map(d => `${d.kind} ${d.name}:${d.line}`).join(", ")}${s.defs.length > 18 ? ", …" : ""}`),
+    "",
+    "Internal namespace dependency edges:",
+    ...(edges.length ? edges.slice(0, 80).map(e => `- ${e}`) : ["- none detected"]),
+    edges.length > 80 ? `- … ${edges.length - 80} more` : "",
+    "",
+    "Data-flow/debugging hints:",
+    ...(tapFiles.length ? tapFiles.map(s => `- ${s.file}: ${s.taps} tap> call(s), good candidate for clj_repl_tap_collect`) : ["- no tap> calls detected; add tap> at pipeline boundaries or use clj_repl_trace on key vars"]),
+    "- Use clj_repl_trace around boundary functions, pure transformations, persistence, and external service adapters.",
+    "- Use clj_repl_inspect_var for arglists/source, clj_repl_macroexpand for DSLs/macros, and clj_repl_profile for suspected hot paths.",
+    "",
+    "Potential pain points:",
+    ...(todos.length ? todos.slice(0, 40).map(t => `- ${t}`) : ["- no TODO/FIXME/HACK markers found"]),
+    todos.length > 40 ? `- … ${todos.length - 40} more` : ""
+  ].filter(Boolean);
+  return out.join("\n");
+}
 
 // ---- conservative Clojure top-level form scanner --------------------------
 
@@ -589,6 +678,149 @@ export default function (pi: ExtensionAPI) {
         return { content: text(truncate(replText(summary))), details: summary, isError };
       } catch (e: any) {
         return { content: text(`debug toolkit status error: ${e.message}`), isError: true };
+      }
+    }
+  });
+
+  pi.registerTool({
+    name: "clj_project_overview",
+    label: "Clojure Project Overview",
+    description: "Scan Clojure source files and summarize namespaces, defs, tests, internal dependencies, tap> instrumentation, TODOs, and likely architecture/pain points.",
+    promptSnippet: "Understand a Clojure project: namespaces, functions, tests, data-flow hooks, architecture and pain points",
+    promptGuidelines: ["Use before large changes to orient the agent and explain project architecture to the user."],
+    parameters: Type.Object({
+      root: Type.Optional(Type.String({ description: "Project subdirectory to scan, defaults to current cwd" })),
+      maxFiles: Type.Optional(Type.Number({ default: 400 }))
+    }),
+    async execute(_id, p, _signal, _onUpdate, ctx) {
+      try {
+        const root = path.resolve(ctx.cwd, p.root ?? ".");
+        const summaries = await projectSummary(root, p.maxFiles ?? 400);
+        const overview = projectOverviewText(summaries, root);
+        return { content: text(truncate(overview)), details: { files: summaries } };
+      } catch (e: any) {
+        return { content: text(`project overview error: ${e.message}`), isError: true };
+      }
+    }
+  });
+
+  pi.registerTool({
+    name: "clj_repl_profile",
+    label: "Clojure Async Profiler",
+    description: "Profile a Clojure expression with clj-async-profiler and return generated collapsed stacks/flamegraph files.",
+    promptSnippet: "Profile suspected Clojure hot paths and generate flamegraphs",
+    promptGuidelines: ["Use after functional correctness is established and a specific hot path is suspected."],
+    parameters: Type.Object({
+      expr: Type.String({ description: "Clojure expression/body to profile, e.g. (my.app/hot-path 10000)" }),
+      ns: Type.Optional(Type.String({ default: "user" })),
+      event: Type.Optional(Type.String({ description: "Profiler event, usually cpu or alloc", default: "cpu" })),
+      title: Type.Optional(Type.String({ default: "pi-clojure-profile" })),
+      clearResults: Type.Optional(Type.Boolean({ default: false })),
+      port: Type.Optional(Type.Number()),
+      timeoutMs: Type.Optional(Type.Number({ default: 180000 }))
+    }),
+    async execute(_id, p, _signal, _onUpdate, ctx) {
+      try {
+        const event = p.event ?? "cpu";
+        if (!/^[A-Za-z0-9_-]+$/.test(event)) return { content: text("Profiler event must be a simple event name like cpu or alloc."), isError: true };
+        const code = `
+(do
+  (try
+    (require '[clj-async-profiler.core :as prof])
+    (catch Throwable t#
+      (throw (ex-info "clj-async-profiler is not available. macOS install: brew install async-profiler graphviz. Add com.clojure-goes-fast/clj-async-profiler to a dev/nREPL alias and restart nREPL with -Djdk.attach.allowAttachSelf=true if needed." {:cause (.getMessage t#)}))))
+  ${p.clearResults ? "(prof/clear-results)" : "nil"}
+  (let [result# (prof/profile {:event :${event} :title ${cljString(p.title ?? "pi-clojure-profile")}}
+                  ${p.expr})
+        dir# (java.io.File. "/tmp/clj-async-profiler/results")
+        files# (if (.exists dir#)
+                 (->> (file-seq dir#)
+                      (filter #(.isFile %))
+                      (map (fn [f#] {:path (.getAbsolutePath f#) :bytes (.length f#)}))
+                      (sort-by :path)
+                      vec)
+                 [])]
+    {:result result# :files files#
+     :hint "Open the *-flamegraph.html file in a browser to inspect hotspots."}))`;
+        const { summary, isError } = await evalClojureTool(ctx.cwd, code, p.ns ?? "user", p.port, "127.0.0.1", p.timeoutMs ?? 180_000);
+        return { content: text(truncate(replText(summary))), details: summary, isError };
+      } catch (e: any) {
+        return { content: text(`profile error: ${e.message}\nmacOS setup: brew install async-profiler graphviz; add com.clojure-goes-fast/clj-async-profiler to a dev/nREPL alias; restart nREPL with -Djdk.attach.allowAttachSelf=true if attach fails.`), isError: true };
+      }
+    }
+  });
+
+  pi.registerTool({
+    name: "clj_portal_open",
+    label: "Clojure Portal Open",
+    description: "Open a Portal inspector in the live REPL and optionally register it as a tap> target.",
+    promptSnippet: "Open Portal for rich visual inspection of Clojure data and tap> streams",
+    parameters: Type.Object({
+      registerTap: Type.Optional(Type.Boolean({ default: true })),
+      ns: Type.Optional(Type.String({ default: "user" })),
+      port: Type.Optional(Type.Number()),
+      timeoutMs: Type.Optional(Type.Number({ default: 60000 }))
+    }),
+    async execute(_id, p, _signal, _onUpdate, ctx) {
+      try {
+        const code = `
+(do
+  (try
+    (require '[portal.api :as portal])
+    (catch Throwable t#
+      (throw (ex-info "Portal is not available. Add djblue/portal to a dev/nREPL alias and restart nREPL. Example: {:extra-deps {djblue/portal {:mvn/version \\\"RELEASE\\\"}}}" {:cause (.getMessage t#)}))))
+  (def pi-portal (portal/open))
+  ${p.registerTap ?? true ? "(add-tap #'portal/submit)" : "nil"}
+  {:portal #'pi-portal :tap-registered ${p.registerTap ?? true}})`;
+        const { summary, isError } = await evalClojureTool(ctx.cwd, code, p.ns ?? "user", p.port, "127.0.0.1", p.timeoutMs ?? 60_000);
+        return { content: text(truncate(replText(summary))), details: summary, isError };
+      } catch (e: any) {
+        return { content: text(`portal open error: ${e.message}\nInstall: add djblue/portal to a dev/nREPL alias and restart nREPL.`), isError: true };
+      }
+    }
+  });
+
+  pi.registerTool({
+    name: "clj_portal_tap",
+    label: "Clojure Portal Tap Value",
+    description: "Submit a Clojure expression's value to tap>/Portal and return it in the tool result too.",
+    promptSnippet: "Send selected Clojure data to Portal/tap> for visual inspection",
+    parameters: Type.Object({
+      expr: Type.String({ description: "Expression whose value should be tapped/submitted" }),
+      ns: Type.Optional(Type.String({ default: "user" })),
+      port: Type.Optional(Type.Number()),
+      timeoutMs: Type.Optional(Type.Number({ default: 60000 }))
+    }),
+    async execute(_id, p, _signal, _onUpdate, ctx) {
+      try {
+        const code = `(let [v# ${p.expr}] (tap> v#) v#)`;
+        const { summary, isError } = await evalClojureTool(ctx.cwd, code, p.ns ?? "user", p.port, "127.0.0.1", p.timeoutMs ?? 60_000);
+        return { content: text(truncate(replText(summary))), details: summary, isError };
+      } catch (e: any) {
+        return { content: text(`portal/tap error: ${e.message}`), isError: true };
+      }
+    }
+  });
+
+  pi.registerTool({
+    name: "clj_cider_info",
+    label: "CIDER nREPL Info",
+    description: "Use cider-nrepl's info op, when available, to get richer symbol docs/source metadata than plain resolve.",
+    promptSnippet: "Fetch richer CIDER nREPL info for a Clojure symbol",
+    parameters: Type.Object({
+      symbol: Type.String({ description: "Symbol to inspect, e.g. clojure.core/map or my.app/foo" }),
+      ns: Type.Optional(Type.String({ default: "user" })),
+      port: Type.Optional(Type.Number()),
+      timeoutMs: Type.Optional(Type.Number({ default: 60000 }))
+    }),
+    async execute(_id, p, _signal, _onUpdate, ctx) {
+      try {
+        const msgs = await nreplRequest(ctx.cwd, { op: "info", symbol: p.symbol, ns: p.ns ?? "user" }, p.port, "127.0.0.1", p.timeoutMs ?? 60_000);
+        const hasUnknown = msgs.some(m => Array.isArray(m.status) && m.status.map(String).includes("unknown-op"));
+        if (hasUnknown) return { content: text("cider-nrepl info op is not available. Install cider-nrepl in your nREPL alias and restart: add cider/cider-nrepl and middleware [cider.nrepl/cider-middleware]."), details: { messages: msgs }, isError: true };
+        return { content: text(truncate(JSON.stringify(msgs, null, 2))), details: { messages: msgs } };
+      } catch (e: any) {
+        return { content: text(`cider info error: ${e.message}\nInstall: add cider/cider-nrepl to a dev/nREPL alias and use cider.nrepl/cider-middleware.`), isError: true };
       }
     }
   });
