@@ -705,6 +705,141 @@ export default function (pi: ExtensionAPI) {
   });
 
   pi.registerTool({
+    name: "clj_flowstorm_connect",
+    label: "FlowStorm Connect",
+    description: "Require FlowStorm, open/connect the debugger UI, and optionally start recording.",
+    promptSnippet: "Open FlowStorm time-travel debugger for live Clojure execution",
+    parameters: Type.Object({
+      startRecording: Type.Optional(Type.Boolean({ default: false })),
+      ns: Type.Optional(Type.String({ default: "user" })),
+      port: Type.Optional(Type.Number()),
+      timeoutMs: Type.Optional(Type.Number({ default: 60000 }))
+    }),
+    async execute(_id, p, _signal, _onUpdate, ctx) {
+      try {
+        const code = `
+(do
+  (try
+    (require '[flow-storm.api :as fs-api])
+    (catch Throwable t#
+      (throw (ex-info "FlowStorm is not available. Add com.github.flow-storm/flow-storm-dbg version 4.5.9 to a dev/nREPL alias and restart nREPL. Requires JDK 17+." {:cause (.getMessage t#)}))))
+  (fs-api/local-connect)
+  ${p.startRecording ? "(fs-api/start-recording)" : "nil"}
+  {:flowstorm :connected :recording ${p.startRecording ? "true" : "false"}
+   :next "Use clj_flowstorm_trace_expr for #rtrace-style execution, or clj_flowstorm_instrument_var / clj_flowstorm_instrument_namespaces then run code normally."})`;
+        const { summary, isError } = await evalClojureTool(ctx.cwd, code, p.ns ?? "user", p.port, "127.0.0.1", p.timeoutMs ?? 60_000);
+        return { content: text(truncate(replText(summary))), details: summary, isError };
+      } catch (e: any) {
+        return { content: text(`FlowStorm connect error: ${e.message}\nInstall: add com.github.flow-storm/flow-storm-dbg {:mvn/version \"4.5.9\"} to a dev/nREPL alias and restart nREPL. Requires JDK 17+.`), isError: true };
+      }
+    }
+  });
+
+  pi.registerTool({
+    name: "clj_flowstorm_recording",
+    label: "FlowStorm Recording Control",
+    description: "Start or stop FlowStorm recording in the live REPL.",
+    promptSnippet: "Control FlowStorm recording while keeping the human in the loop",
+    parameters: Type.Object({
+      action: Type.Union([Type.Literal("start"), Type.Literal("stop")]),
+      ns: Type.Optional(Type.String({ default: "user" })),
+      port: Type.Optional(Type.Number()),
+      timeoutMs: Type.Optional(Type.Number({ default: 60000 }))
+    }),
+    async execute(_id, p, _signal, _onUpdate, ctx) {
+      try {
+        const f = p.action === "start" ? "start-recording" : "stop-recording";
+        const code = `(do (require '[flow-storm.api :as fs-api]) (fs-api/${f}) {:flowstorm :ok :recording-action ${cljString(p.action)}})`;
+        const { summary, isError } = await evalClojureTool(ctx.cwd, code, p.ns ?? "user", p.port, "127.0.0.1", p.timeoutMs ?? 60_000);
+        return { content: text(truncate(replText(summary))), details: summary, isError };
+      } catch (e: any) {
+        return { content: text(`FlowStorm recording error: ${e.message}`), isError: true };
+      }
+    }
+  });
+
+  pi.registerTool({
+    name: "clj_flowstorm_trace_expr",
+    label: "FlowStorm Trace Expression",
+    description: "Run a Clojure expression through FlowStorm's #rtrace-style instrumentation and show it in the FlowStorm UI.",
+    promptSnippet: "Time-travel trace one expression with FlowStorm without writing wrapper scripts",
+    parameters: Type.Object({
+      expr: Type.String({ description: "Expression to instrument and run, e.g. (my.app/handler req)" }),
+      ns: Type.Optional(Type.String({ default: "user" })),
+      flowId: Type.Optional(Type.String({ description: "Optional FlowStorm flow id/name" })),
+      port: Type.Optional(Type.Number()),
+      timeoutMs: Type.Optional(Type.Number({ default: 120000 }))
+    }),
+    async execute(_id, p, _signal, _onUpdate, ctx) {
+      try {
+        const opts = p.flowId ? `{:flow-id ${cljString(p.flowId)}}` : `{}`;
+        const code = `
+(do
+  (require '[flow-storm.api :as fs-api])
+  (fs-api/local-connect)
+  (let [result# (fs-api/runi ${opts} ${p.expr})]
+    {:result result#
+     :flowstorm :recorded
+     :hint "Inspect the newest flow in the FlowStorm window. Use Code, Call Stack Tree, Functions, and Timeline panes."}))`;
+        const { summary, isError } = await evalClojureTool(ctx.cwd, code, p.ns ?? "user", p.port, "127.0.0.1", p.timeoutMs ?? 120_000);
+        return { content: text(truncate(replText(summary))), details: summary, isError };
+      } catch (e: any) {
+        return { content: text(`FlowStorm trace expr error: ${e.message}\nInstall: add com.github.flow-storm/flow-storm-dbg to dev/nREPL alias and restart. Then run clj_flowstorm_connect.`), isError: true };
+      }
+    }
+  });
+
+  pi.registerTool({
+    name: "clj_flowstorm_instrument_var",
+    label: "FlowStorm Instrument Var",
+    description: "Instrument or uninstrument one Clojure var with FlowStorm so normal calls are recorded.",
+    promptSnippet: "Instrument a specific Clojure function for FlowStorm recording",
+    parameters: Type.Object({
+      symbol: Type.String({ description: "Fully-qualified var symbol, e.g. mount.core/start" }),
+      action: Type.Optional(Type.Union([Type.Literal("instrument"), Type.Literal("uninstrument")], { default: "instrument" })),
+      ns: Type.Optional(Type.String({ default: "user" })),
+      port: Type.Optional(Type.Number()),
+      timeoutMs: Type.Optional(Type.Number({ default: 60000 }))
+    }),
+    async execute(_id, p, _signal, _onUpdate, ctx) {
+      try {
+        const f = (p.action ?? "instrument") === "uninstrument" ? "uninstrument-var-clj" : "instrument-var-clj";
+        const code = `(do (require '[flow-storm.api :as fs-api]) (fs-api/${f} (symbol ${cljString(p.symbol)})) {:flowstorm :ok :action ${cljString(p.action ?? "instrument")} :var ${cljString(p.symbol)}})`;
+        const { summary, isError } = await evalClojureTool(ctx.cwd, code, p.ns ?? "user", p.port, "127.0.0.1", p.timeoutMs ?? 60_000);
+        return { content: text(truncate(replText(summary))), details: summary, isError };
+      } catch (e: any) {
+        return { content: text(`FlowStorm instrument var error: ${e.message}`), isError: true };
+      }
+    }
+  });
+
+  pi.registerTool({
+    name: "clj_flowstorm_instrument_namespaces",
+    label: "FlowStorm Instrument Namespaces",
+    description: "Instrument or uninstrument namespaces by prefix with FlowStorm.",
+    promptSnippet: "Instrument Clojure namespaces for broad FlowStorm time-travel debugging",
+    parameters: Type.Object({
+      prefixes: Type.Array(Type.String(), { description: "Namespace prefixes, e.g. [\"mount.core\", \"my.app\"]" }),
+      action: Type.Optional(Type.Union([Type.Literal("instrument"), Type.Literal("uninstrument")], { default: "instrument" })),
+      verbose: Type.Optional(Type.Boolean({ default: false })),
+      ns: Type.Optional(Type.String({ default: "user" })),
+      port: Type.Optional(Type.Number()),
+      timeoutMs: Type.Optional(Type.Number({ default: 120000 }))
+    }),
+    async execute(_id, p, _signal, _onUpdate, ctx) {
+      try {
+        const f = (p.action ?? "instrument") === "uninstrument" ? "uninstrument-namespaces-clj" : "instrument-namespaces-clj";
+        const prefixes = p.prefixes.map((x: string) => cljString(x)).join(" ");
+        const code = `(do (require '[flow-storm.api :as fs-api]) (fs-api/${f} #{${prefixes}} {:verbose? ${p.verbose ? "true" : "false"}}) {:flowstorm :ok :action ${cljString(p.action ?? "instrument")} :prefixes #{${prefixes}}})`;
+        const { summary, isError } = await evalClojureTool(ctx.cwd, code, p.ns ?? "user", p.port, "127.0.0.1", p.timeoutMs ?? 120_000);
+        return { content: text(truncate(replText(summary))), details: summary, isError };
+      } catch (e: any) {
+        return { content: text(`FlowStorm instrument namespaces error: ${e.message}`), isError: true };
+      }
+    }
+  });
+
+  pi.registerTool({
     name: "clj_repl_profile",
     label: "Clojure Async Profiler",
     description: "Profile a Clojure expression with clj-async-profiler and return generated collapsed stacks/flamegraph files.",

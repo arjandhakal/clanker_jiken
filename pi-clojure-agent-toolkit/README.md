@@ -41,7 +41,10 @@ Start an nREPL that writes `.nrepl-port`. Example deps.edn alias:
 {:aliases
  {:nrepl
   {:extra-deps {nrepl/nrepl {:mvn/version "1.3.1"}
-                cider/cider-nrepl {:mvn/version "0.56.0"}}
+                cider/cider-nrepl {:mvn/version "0.56.0"}
+                ;; optional visual debugger / inspector integrations
+                djblue/portal {:mvn/version "0.58.5"}
+                com.github.flow-storm/flow-storm-dbg {:mvn/version "4.5.9"}}
    :main-opts ["-m" "nrepl.cmdline"
                "--middleware" "[cider.nrepl/cider-middleware]"]}}}
 ```
@@ -79,6 +82,11 @@ Use these at the start of a task when the user wants to understand project archi
 
 ### Data debugging and tracing
 
+- `clj_flowstorm_connect` — opens/connects the FlowStorm UI and optionally starts recording.
+- `clj_flowstorm_trace_expr` — runs one expression through FlowStorm's `#rtrace`-style instrumentation and records it in the UI.
+- `clj_flowstorm_recording` — starts/stops FlowStorm recording while the human inspects the UI.
+- `clj_flowstorm_instrument_var` — instruments or un-instruments one var so normal calls are recorded by FlowStorm.
+- `clj_flowstorm_instrument_namespaces` — instruments or un-instruments namespaces by prefix for broader time-travel debugging.
 - `clj_repl_tap_collect` — temporarily installs `add-tap`, evaluates an expression, and returns every `tap>` value plus the final result.
 - `clj_repl_trace` — temporarily wraps selected fully-qualified vars with `with-redefs`, evaluates an expression, and returns call/return/throw events with args and values.
 - `clj_repl_inspect_var` — resolves a var and returns arglists, docstring, metadata, source file/line, value class, and a safe value preview.
@@ -125,7 +133,7 @@ Useful optional libraries:
 
 - **cider-nrepl** — richer nREPL info, stacktrace, completion, macroexpand, test ops.
 - **refactor-nrepl** — refactor operations such as clean-ns and rename support.
-- **FlowStorm** — serious time-travel debugger/tracer for Clojure/CLJS.
+- **FlowStorm** — serious time-travel debugger/tracer for Clojure/CLJS. Add `com.github.flow-storm/flow-storm-dbg` to a dev/nREPL alias, start nREPL on JDK 17+, then use `clj_flowstorm_connect` and `clj_flowstorm_trace_expr`.
 - **Portal** / **Reveal** — rich visual inspectors for `tap>` data.
 - **clj-async-profiler** — CPU allocation profiling/flamegraphs. macOS: `brew install async-profiler graphviz` plus the Clojure dependency.
 - **criterium** — reliable microbenchmarking.
@@ -144,8 +152,9 @@ If the agent tries to use a missing optional dependency, the tool output include
 3. Use `clj_repl_tap_collect` or `clj_repl_trace` to follow data through the running system.
 4. Use `clj_project_overview` to explain namespaces, architecture, test coverage, data-flow hooks, and likely pain points to the user.
 5. If visual inspection helps, use `clj_portal_open` and `clj_portal_tap`.
-6. Edit with `clj_replace_top_level_form` where possible.
-7. Run `clj_repl_require_reload`.
-8. Run focused `clj_repl_run_test`.
-9. Run `clj_lint`, `clj_format`, and broader `clj_run_tests`.
-10. If performance matters, use `clj_repl_profile` on a specific hot path and inspect the generated flamegraph.
+6. If execution history matters, use `clj_flowstorm_connect`; then either `clj_flowstorm_trace_expr` for one expression or instrument vars/namespaces and control recording with `clj_flowstorm_recording`.
+7. Edit with `clj_replace_top_level_form` where possible.
+8. Run `clj_repl_require_reload`.
+9. Run focused `clj_repl_run_test`.
+10. Run `clj_lint`, `clj_format`, and broader `clj_run_tests`.
+11. If performance matters, use `clj_repl_profile` on a specific hot path and inspect the generated flamegraph.
