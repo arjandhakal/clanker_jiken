@@ -221,8 +221,22 @@ function findTopLevelDef(src: string, symbol: string) {
   return null;
 }
 
+async function clojureZprint(cwd: string) {
+  const zprint = await which("zprint", cwd);
+  if (!zprint) return "";
+
+  // macOS ships /usr/bin/zprint, a kernel zone-memory diagnostic tool whose
+  // options overlap with Clojure zprint (-w/-c). Do not treat it as a Clojure
+  // formatter, or formatting appears to succeed while only printing memory stats.
+  const probe = await exec(zprint, ["--help"], cwd, 10_000);
+  const help = `${probe.stdout}\n${probe.stderr}`;
+  if (/wasted memory|wired memory|kalloc|zone info/i.test(help)) return "";
+  return zprint;
+}
+
 async function maybeFormatFile(file: string, cwd: string, signal?: AbortSignal) {
-  if (await which("zprint", cwd)) return exec("zprint", ["-w", file], cwd, 60_000, undefined, signal);
+  const zprint = await clojureZprint(cwd);
+  if (zprint) return exec(zprint, ["-w", file], cwd, 60_000, undefined, signal);
   if (await which("cljfmt", cwd)) return exec("cljfmt", ["fix", file], cwd, 60_000, undefined, signal);
   return undefined;
 }
@@ -309,12 +323,12 @@ export default function (pi: ExtensionAPI) {
       mode: Type.Optional(Type.Union([Type.Literal("write"), Type.Literal("check")], { default: "write" }))
     }),
     async execute(_id, p, signal, _onUpdate, ctx) {
-      const zprint = await which("zprint", ctx.cwd);
+      const zprint = await clojureZprint(ctx.cwd);
       const cljfmt = await which("cljfmt", ctx.cwd);
-      if (!zprint && !cljfmt) return { content: text("No formatter found. Install zprint or cljfmt."), isError: true };
+      if (!zprint && !cljfmt) return { content: text("No Clojure formatter found. Install Clojure zprint or cljfmt."), isError: true };
       const results: ExecResult[] = [];
       if (zprint) {
-        for (const file of p.files) results.push(await exec("zprint", [p.mode === "check" ? "-c" : "-w", file], ctx.cwd, 60_000, undefined, signal));
+        for (const file of p.files) results.push(await exec(zprint, [p.mode === "check" ? "-c" : "-w", file], ctx.cwd, 60_000, undefined, signal));
       } else {
         const args = [p.mode === "check" ? "check" : "fix", ...p.files];
         results.push(await exec("cljfmt", args, ctx.cwd, 60_000, undefined, signal));
