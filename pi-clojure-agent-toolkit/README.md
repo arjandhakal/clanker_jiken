@@ -1,6 +1,22 @@
 # Clojure Agent Toolkit for pi
 
-Project-local pi extension: `.pi/extensions/clojure-agent-toolkit/index.ts`
+Standalone pi package for Clojure development tools.
+
+Extension entrypoint: `extensions/index.ts`
+
+## Use from a project
+
+Add the package to `.pi/settings.json`:
+
+```json
+{
+  "packages": [
+    "../pi-clojure-agent-toolkit"
+  ]
+}
+```
+
+Then run `/reload` in pi or restart pi from that project directory.
 
 ## What it adds
 
@@ -43,13 +59,3 @@ clojure -M:nrepl
 ```
 
 or however your project starts nREPL.
-
-## Reload
-
-In pi, run:
-
-```text
-/reload
-```
-
-or restart pi from this project directory.

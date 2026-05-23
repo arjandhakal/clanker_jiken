@@ -1,0 +1,14 @@
+{
+  "name": "pi-clojure-agent-toolkit",
+  "version": "0.1.0",
+  "description": "Pi extension with Clojure/nREPL, linting, formatting, test, LSP, structural edit, and dependency-audit tools.",
+  "type": "module",
+  "keywords": ["pi-package", "pi", "extension", "clojure", "nrepl", "clj-kondo", "clojure-lsp"],
+  "pi": {
+    "extensions": ["./extensions"]
+  },
+  "peerDependencies": {
+    "@mariozechner/pi-coding-agent": "*",
+    "typebox": "*"
+  }
+}
