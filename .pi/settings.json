@@ -1,6 +1,7 @@
 {
   "packages": [
     "../pi-pet",
-    "../pi-clojure-agent-toolkit"
+    "../pi-clojure-agent-toolkit",
+    "../pi-code-viewer"
   ]
 }
