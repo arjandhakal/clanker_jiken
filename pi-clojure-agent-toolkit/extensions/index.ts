@@ -148,6 +148,82 @@ function nreplSummarize(msgs: Record<string, BVal>[]) {
   return { stdout, stderr, values, ex, status };
 }
 
+function cljString(s: string) {
+  return JSON.stringify(s);
+}
+
+function cljNsSymbol(ns: string) {
+  return ns.replace(/^'+/, "");
+}
+
+function replText(summary: ReturnType<typeof nreplSummarize>) {
+  const out = [`status: ${summary.status.join(",") || "ok"}`];
+  if (summary.values.length) out.push("values:\n" + summary.values.join("\n"));
+  if (summary.stdout) out.push("stdout:\n" + summary.stdout);
+  if (summary.stderr) out.push("stderr:\n" + summary.stderr);
+  if (summary.ex) out.push("exceptions:\n" + summary.ex);
+  return out.join("\n\n");
+}
+
+async function evalClojureTool(cwd: string, code: string, ns = "user", port?: number, host = "127.0.0.1", timeoutMs = 60_000) {
+  const msgs = await nreplRequest(cwd, { op: "eval", code, ns }, port, host, timeoutMs);
+  const summary = nreplSummarize(msgs);
+  return { msgs, summary, isError: summary.status.includes("eval-error") || summary.status.includes("error") };
+}
+
+const OPTIONAL_DEBUG_TOOLS = [
+  {
+    name: "cider-nrepl",
+    ns: "cider.nrepl",
+    install: "Add to deps.edn alias: {:aliases {:nrepl {:extra-deps {nrepl/nrepl {:mvn/version \"1.3.1\"} cider/cider-nrepl {:mvn/version \"0.56.0\"}} :main-opts [\"-m\" \"nrepl.cmdline\" \"--middleware\" \"[cider.nrepl/cider-middleware]\"]}}} then run: clojure -M:nrepl"
+  },
+  {
+    name: "refactor-nrepl",
+    ns: "refactor-nrepl.middleware",
+    install: "Add refactor-nrepl/refactor-nrepl to your nREPL alias and include refactor-nrepl.middleware/wrap-refactor middleware. Usually used together with cider-nrepl."
+  },
+  {
+    name: "FlowStorm",
+    ns: "flow-storm.api",
+    install: "Add com.github.flow-storm/flow-storm-dbg to a dev alias, then start with FlowStorm instrumentation. On macOS, see https://github.com/flow-storm/flow-storm-debugger for current coordinates."
+  },
+  {
+    name: "Portal",
+    ns: "portal.api",
+    install: "Add djblue/portal to a dev alias, e.g. {:aliases {:dev {:extra-deps {djblue/portal {:mvn/version \"RELEASE\"}}}}}. Then evaluate (require '[portal.api :as p]) (def portal (p/open)) (add-tap #'p/submit)."
+  },
+  {
+    name: "Reveal",
+    ns: "vlaaad.reveal",
+    install: "Add vlaaad/reveal to a dev alias, then start its UI from the REPL."
+  },
+  {
+    name: "clj-async-profiler",
+    ns: "clj-async-profiler.core",
+    install: "macOS: brew install async-profiler graphviz. Add com.clojure-goes-fast/clj-async-profiler to a dev alias. You may need sudo or JVM permissions for profiling."
+  },
+  {
+    name: "criterium",
+    ns: "criterium.core",
+    install: "Add criterium/criterium to a dev/test alias, then use criterium.core/quick-bench or bench from the REPL."
+  },
+  {
+    name: "debux",
+    ns: "debux.core",
+    install: "Add philoskim/debux to a dev alias, then use debux.core/dbg and friends for inline expression tracing."
+  },
+  {
+    name: "hashp",
+    ns: "hashp.core",
+    install: "Add hashp/hashp to a dev alias and require hashp.core to enable #p/#pp reader debugging forms."
+  },
+  {
+    name: "tools.trace",
+    ns: "clojure.tools.trace",
+    install: "Add org.clojure/tools.trace to a dev alias, then use trace-vars/trace-ns for function call tracing."
+  }
+];
+
 // ---- conservative Clojure top-level form scanner --------------------------
 
 function isSymChar(ch: string) { return /[^\s\[\]\(\)\{\}";,]/.test(ch); }
@@ -288,6 +364,231 @@ export default function (pi: ExtensionAPI) {
         return { content: text(truncate(JSON.stringify(msgs, null, 2))), details: { messages: msgs } };
       } catch (e: any) {
         return { content: text(`nREPL op error: ${e.message}`), isError: true };
+      }
+    }
+  });
+
+  pi.registerTool({
+    name: "clj_repl_macroexpand",
+    label: "Clojure Macroexpand",
+    description: "Macroexpand a Clojure form through nREPL. Useful for macros, threading, DSLs, re-frame, HoneySQL, etc.",
+    promptSnippet: "Macroexpand Clojure forms through the live REPL",
+    parameters: Type.Object({
+      form: Type.String({ description: "Clojure form to macroexpand, e.g. (-> x inc str)" }),
+      ns: Type.Optional(Type.String({ description: "Namespace, defaults to user" })),
+      full: Type.Optional(Type.Boolean({ description: "Use macroexpand instead of macroexpand-1", default: true })),
+      port: Type.Optional(Type.Number()),
+      timeoutMs: Type.Optional(Type.Number({ default: 60000 }))
+    }),
+    async execute(_id, p, _signal, _onUpdate, ctx) {
+      try {
+        const op = (p.full ?? true) ? "macroexpand" : "macroexpand-1";
+        const code = `(do (require 'clojure.pprint) (with-out-str (clojure.pprint/pprint (${op} '${p.form}))))`;
+        const { summary, isError } = await evalClojureTool(ctx.cwd, code, p.ns ?? "user", p.port, "127.0.0.1", p.timeoutMs ?? 60_000);
+        return { content: text(truncate(replText(summary))), details: summary, isError };
+      } catch (e: any) {
+        return { content: text(`macroexpand error: ${e.message}`), isError: true };
+      }
+    }
+  });
+
+  pi.registerTool({
+    name: "clj_repl_inspect_var",
+    label: "Clojure Inspect Var",
+    description: "Inspect a var via nREPL: namespace, name, arglists, docstring, metadata, source file/line, and current value summary.",
+    promptSnippet: "Inspect Clojure vars, docs, metadata, source location, and current value",
+    parameters: Type.Object({
+      symbol: Type.String({ description: "Fully-qualified or namespace-relative var symbol, e.g. clojure.core/map or my-fn" }),
+      ns: Type.Optional(Type.String({ description: "Namespace used to resolve relative symbols, defaults to user" })),
+      port: Type.Optional(Type.Number()),
+      timeoutMs: Type.Optional(Type.Number({ default: 60000 }))
+    }),
+    async execute(_id, p, _signal, _onUpdate, ctx) {
+      try {
+        const code = `
+(let [sym# (symbol ${cljString(p.symbol)})
+      v# (or (resolve sym#)
+             (when (namespace sym#) (requiring-resolve sym#)))]
+  (if-not v#
+    {:error (str "Could not resolve var: " sym#)}
+    (let [m# (meta v#)]
+      {:symbol (str (:ns m#) "/" (:name m#))
+       :ns (str (:ns m#))
+       :name (str (:name m#))
+       :arglists (:arglists m#)
+       :doc (:doc m#)
+       :file (:file m#)
+       :line (:line m#)
+       :column (:column m#)
+       :macro (:macro m#)
+       :dynamic (:dynamic m#)
+       :private (:private m#)
+       :protocol (:protocol m#)
+       :value-class (some-> @v# class str)
+       :value-preview (binding [*print-length* 20 *print-level* 5]
+                        (pr-str @v#))})))`;
+        const { summary, isError } = await evalClojureTool(ctx.cwd, code, p.ns ?? "user", p.port, "127.0.0.1", p.timeoutMs ?? 60_000);
+        return { content: text(truncate(replText(summary))), details: summary, isError };
+      } catch (e: any) {
+        return { content: text(`inspect var error: ${e.message}`), isError: true };
+      }
+    }
+  });
+
+  pi.registerTool({
+    name: "clj_repl_require_reload",
+    label: "Clojure Require/Reload Namespace",
+    description: "Require a namespace through nREPL, optionally with :reload or :reload-all.",
+    promptSnippet: "Reload Clojure namespaces in the live REPL after edits",
+    parameters: Type.Object({
+      namespace: Type.String({ description: "Namespace to require/reload, e.g. my.app.core" }),
+      reload: Type.Optional(Type.Boolean({ default: true })),
+      reloadAll: Type.Optional(Type.Boolean({ default: false })),
+      ns: Type.Optional(Type.String({ description: "Current evaluation namespace, defaults to user" })),
+      port: Type.Optional(Type.Number()),
+      timeoutMs: Type.Optional(Type.Number({ default: 60000 }))
+    }),
+    async execute(_id, p, _signal, _onUpdate, ctx) {
+      try {
+        const opt = p.reloadAll ? " :reload-all" : (p.reload ?? true) ? " :reload" : "";
+        const code = `(do (require '${cljNsSymbol(p.namespace)}${opt}) :ok)`;
+        const { summary, isError } = await evalClojureTool(ctx.cwd, code, p.ns ?? "user", p.port, "127.0.0.1", p.timeoutMs ?? 60_000);
+        return { content: text(truncate(replText(summary))), details: summary, isError };
+      } catch (e: any) {
+        return { content: text(`require/reload error: ${e.message}`), isError: true };
+      }
+    }
+  });
+
+  pi.registerTool({
+    name: "clj_repl_run_test",
+    label: "Clojure REPL Test Runner",
+    description: "Run one Clojure test namespace or one test var inside the live REPL and return structured clojure.test results.",
+    promptSnippet: "Run focused clojure.test tests inside nREPL after reloading code",
+    parameters: Type.Object({
+      namespace: Type.String({ description: "Test namespace, e.g. my.app.core-test" }),
+      var: Type.Optional(Type.String({ description: "Optional test var name inside namespace, e.g. parse-test" })),
+      reload: Type.Optional(Type.Boolean({ default: true })),
+      ns: Type.Optional(Type.String({ default: "user" })),
+      port: Type.Optional(Type.Number()),
+      timeoutMs: Type.Optional(Type.Number({ default: 120000 }))
+    }),
+    async execute(_id, p, _signal, _onUpdate, ctx) {
+      try {
+        const testNs = cljNsSymbol(p.namespace);
+        const code = p.var
+          ? `(do (require 'clojure.test) (require '${testNs}${(p.reload ?? true) ? " :reload" : ""}) (let [v# (resolve '${testNs}/${p.var}) events# (atom [])] (if-not v# {:error "test var not found"} (do (with-redefs [clojure.test/report (fn [m#] (swap! events# conj (select-keys m# [:type :message :expected :actual :file :line :var])))] (clojure.test/test-vars [v#])) (merge {:events @events#} (frequencies (map :type @events#)))))))`
+          : `(do (require 'clojure.test) (require '${testNs}${(p.reload ?? true) ? " :reload" : ""}) (clojure.test/run-tests '${testNs}))`;
+        const { summary, isError } = await evalClojureTool(ctx.cwd, code, p.ns ?? "user", p.port, "127.0.0.1", p.timeoutMs ?? 120_000);
+        const failed = summary.values.some(v => /:fail\s+[1-9]|:error\s+[1-9]/.test(v));
+        return { content: text(truncate(replText(summary))), details: summary, isError: isError || failed };
+      } catch (e: any) {
+        return { content: text(`REPL test error: ${e.message}`), isError: true };
+      }
+    }
+  });
+
+  pi.registerTool({
+    name: "clj_repl_tap_collect",
+    label: "Clojure tap> Collector",
+    description: "Install a temporary add-tap collector, evaluate an expression, and return all tap> values plus the result.",
+    promptSnippet: "Collect tap> data emitted while evaluating Clojure expressions",
+    promptGuidelines: ["Use clj_repl_tap_collect when debugging data pipelines that emit tap> values."],
+    parameters: Type.Object({
+      expr: Type.String({ description: "Clojure expression to evaluate while collecting tap> values" }),
+      ns: Type.Optional(Type.String({ default: "user" })),
+      waitMs: Type.Optional(Type.Number({ description: "Wait after evaluation for async taps", default: 100 })),
+      port: Type.Optional(Type.Number()),
+      timeoutMs: Type.Optional(Type.Number({ default: 60000 }))
+    }),
+    async execute(_id, p, _signal, _onUpdate, ctx) {
+      try {
+        const code = `
+(let [taps# (atom [])
+      tap-fn# (fn [x#] (swap! taps# conj x#))]
+  (add-tap tap-fn#)
+  (try
+    (let [result# ${p.expr}]
+      (Thread/sleep ${Math.max(0, p.waitMs ?? 100)})
+      {:result result# :tap-count (count @taps#) :taps @taps#})
+    (finally
+      (remove-tap tap-fn#))))`;
+        const { summary, isError } = await evalClojureTool(ctx.cwd, code, p.ns ?? "user", p.port, "127.0.0.1", p.timeoutMs ?? 60_000);
+        return { content: text(truncate(replText(summary))), details: summary, isError };
+      } catch (e: any) {
+        return { content: text(`tap collect error: ${e.message}`), isError: true };
+      }
+    }
+  });
+
+  pi.registerTool({
+    name: "clj_repl_trace",
+    label: "Clojure REPL Trace Vars",
+    description: "Temporarily wrap selected vars with with-redefs, evaluate an expression, and return call/return/throw events with args and values.",
+    promptSnippet: "Trace selected Clojure vars around a live expression without changing source files",
+    promptGuidelines: ["Use clj_repl_trace to understand data flow through pure functions and service boundaries."],
+    parameters: Type.Object({
+      expr: Type.String({ description: "Clojure expression to evaluate under tracing" }),
+      vars: Type.Array(Type.String(), { description: "Fully-qualified vars to trace, e.g. [\"my.app/foo\", \"my.app/bar\"]" }),
+      ns: Type.Optional(Type.String({ default: "user" })),
+      port: Type.Optional(Type.Number()),
+      timeoutMs: Type.Optional(Type.Number({ default: 60000 }))
+    }),
+    async execute(_id, p, _signal, _onUpdate, ctx) {
+      try {
+        if (!p.vars.length) return { content: text("Provide at least one fully-qualified var to trace."), isError: true };
+        const bindings = p.vars.map((v: string) => `${v} (wrap# '${v} ${v})`).join("\n        ");
+        const code = `
+(let [events# (atom [])
+      counter# (atom 0)
+      safe# (fn [x#] (binding [*print-length* 30 *print-level* 6] (pr-str x#)))
+      wrap# (fn [sym# f#]
+              (fn [& args#]
+                (let [id# (swap! counter# inc)]
+                  (swap! events# conj {:event :call :id id# :var (str sym#) :args (mapv safe# args#)})
+                  (try
+                    (let [ret# (apply f# args#)]
+                      (swap! events# conj {:event :return :id id# :var (str sym#) :value (safe# ret#)})
+                      ret#)
+                    (catch Throwable t#
+                      (swap! events# conj {:event :throw :id id# :var (str sym#) :class (str (class t#)) :message (.getMessage t#)})
+                      (throw t#))))))]
+  (with-redefs [${bindings}]
+    (let [result# ${p.expr}]
+      {:result (safe# result#) :event-count (count @events#) :events @events#})))`;
+        const { summary, isError } = await evalClojureTool(ctx.cwd, code, p.ns ?? "user", p.port, "127.0.0.1", p.timeoutMs ?? 60_000);
+        return { content: text(truncate(replText(summary))), details: summary, isError };
+      } catch (e: any) {
+        return { content: text(`trace error: ${e.message}\nTip: vars must be fully-qualified and loaded. Use clj_repl_require_reload first.`), isError: true };
+      }
+    }
+  });
+
+  pi.registerTool({
+    name: "clj_debug_toolkit_status",
+    label: "Clojure Debug Toolkit Status",
+    description: "Check optional Clojure debugging/profiling libraries in the live REPL and print macOS-focused install guidance for missing tools.",
+    promptSnippet: "Check optional Clojure debug/profiling libraries and get install guidance",
+    parameters: Type.Object({
+      port: Type.Optional(Type.Number()),
+      timeoutMs: Type.Optional(Type.Number({ default: 60000 }))
+    }),
+    async execute(_id, p, _signal, _onUpdate, ctx) {
+      try {
+        const specs = OPTIONAL_DEBUG_TOOLS.map(t => `{:name ${cljString(t.name)} :ns '${t.ns} :install ${cljString(t.install)}}`).join(" ");
+        const code = `
+(let [specs# [${specs}]]
+  (mapv (fn [{:keys [name ns install] :as spec#}]
+          (try
+            (require ns)
+            (assoc spec# :available true)
+            (catch Throwable t#
+              (assoc spec# :available false :error (.getMessage t#)))))
+        specs#))`;
+        const { summary, isError } = await evalClojureTool(ctx.cwd, code, "user", p.port, "127.0.0.1", p.timeoutMs ?? 60_000);
+        return { content: text(truncate(replText(summary))), details: summary, isError };
+      } catch (e: any) {
+        return { content: text(`debug toolkit status error: ${e.message}`), isError: true };
       }
     }
   });
