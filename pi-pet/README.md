@@ -1,30 +1,25 @@
 # pi-pet
 
-A tiny pet widget for the [pi coding agent](https://pi.dev). It adds a cute Frieren pixel-art pet, extracted from the multi-expression sprite sheet you provided, with different moods while you work.
+A tiny pet widget for the [pi coding agent](https://pi.dev). It adds compact pixel-art pets extracted from the Craftpix female sprite package you provided, with character selection and mood/action animation while you work.
 
 Source/derived assets:
-- `assets/source/frieren-pixel-source.jpg` — downloaded from the user-provided pixel-art URL.
-- `assets/frieren-pixel-32.png` — point-resized 32x32, 32-color terminal source.
-- `assets/frieren-pixel.png` — enlarged nearest-neighbor preview.
-- `assets/frieren-pixel-generated.txt` — palette and terminal rows used by the extension.
-- `frieren_png_art.png` — multi-expression source sheet provided by the user.
-- `assets/frieren-sprites/*.png` — extracted 32x32 transparent-ish sprite variants.
-- `assets/frieren-sprites-preview.png` — quick local preview of the extracted set.
-- `extensions/pi-pet/frierenSpriteData.ts` — generated terminal palette and sprite rows.
+- `assets/female-sprites-pixel-art/` — source package with `Enchantress`, `Knight`, and `Musketeer` spritesheets.
+- `assets/female-sprites-preview.png` — quick local preview of the selected character/action frames.
+- `extensions/pi-pet/petSpriteData.ts` — generated terminal palette, characters, actions, and animation frames.
 
 ## What it does
 
 - Shows a compact pixel-art pet near the editor.
 - Changes mood automatically:
   - `thinking` when pi starts responding
-  - `tool` while tools run, using the casting-staff sprite
+  - `tool` while tools run, using an attack animation
   - `happy` when a turn finishes
-  - `error` if a tool fails, using the angry sprite
+  - `error` if a tool fails, using a hurt animation
   - `idle` after a short cooldown
-- Provides slash commands for showing/hiding, petting, placement, and manual moods.
-- Samples the full 32x32 source sprite down while rendering, so the whole body fits into a compact 16-column by 8-row terminal pet.
-- Runs a small ambient animation every few seconds, cycling moods and teleporting between left/right offsets and above/below placement.
-- Uses a small registry so more pets can be added later.
+- Provides slash commands for showing/hiding, petting, placement, character selection, and manual moods.
+- Uses Braille-cell rendering, so each terminal character preserves a 2x4 block from the full 32x32 sprite and the whole body fits into a compact 16-column by 8-row terminal pet.
+- Runs a small ambient animation every 10 seconds, cycling moods and teleporting between left/right offsets and above/below placement.
+- Uses a generated character/action registry so more spritesheets can be added later.
 
 ## Install / run
 
@@ -47,7 +42,7 @@ pi install -l ./pi-pet
 /pet                         show current status/help
 /pet show                    show the pet
 /pet hide                    hide the pet
-/pet pat                     make Frieren happy
+/pet pat                     make the pet happy
 /pet mood idle               set a mood manually
 /pet mood thinking
 /pet mood tool
@@ -56,7 +51,6 @@ pi install -l ./pi-pet
 /pet mood sleepy
 /pet mood angry
 /pet mood curious
-/pet mood blushing
 /pet mood dozing
 /pet mood reading
 /pet mood casting
@@ -64,16 +58,18 @@ pi install -l ./pi-pet
 /pet mood content
 /pet place above             render above the editor
 /pet place below             render below the editor
-/pet choose frieren          choose the Frieren-inspired pet
+/pet choose enchantress      choose the enchantress pet
+/pet choose knight
+/pet choose musketeer
 /pet-pat                     shortcut command for /pet pat
 ```
 
 ## Adding another pet later
 
-The extension currently has one `PetId` (`frieren`) and one renderer. To add another pet:
+The extension currently supports three `PetId`s (`enchantress`, `knight`, and `musketeer`). To add another pet:
 
-1. Add the new id to `type PetId` and `PETS` in `extensions/pi-pet/index.ts`.
-2. Add another art array and render function.
-3. Dispatch based on `state.pet` in `render()`.
+1. Add a source folder under `assets/female-sprites-pixel-art/` with the same action sheet names.
+2. Regenerate `extensions/pi-pet/petSpriteData.ts` from the source sheets.
+3. Add the new id to the generated `PET_IDS` list.
 
 You can also move each pet into its own module if the registry grows.
