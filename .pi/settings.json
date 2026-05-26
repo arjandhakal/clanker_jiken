@@ -1,3 +1,6 @@
 {
-  "packages": []
+  "packages": [
+    "../pi-web-search",
+    "../pi-web-page-understander"
+  ]
 }

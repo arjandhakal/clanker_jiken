@@ -1,0 +1,15 @@
+{
+  "name": "pi-web-search",
+  "version": "0.1.0",
+  "description": "Pi extension that adds a web_search tool backed by a local SearXNG instance.",
+  "type": "module",
+  "keywords": ["pi-package", "pi", "extension", "web-search", "searxng", "searchxng"],
+  "pi": {
+    "extensions": ["./extensions"]
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-ai": "*",
+    "typebox": "*"
+  }
+}

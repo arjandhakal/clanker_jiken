@@ -1,0 +1,14 @@
+{
+  "name": "pi-web-page-understander",
+  "version": "0.1.0",
+  "description": "Pi extension that adds a compact webpage understanding tool for token-efficient page extraction.",
+  "type": "module",
+  "keywords": ["pi-package", "pi", "extension", "webpage", "html", "summary", "token-efficient"],
+  "pi": {
+    "extensions": ["./extensions"]
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*",
+    "typebox": "*"
+  }
+}
