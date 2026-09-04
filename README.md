@@ -1,4 +1,10 @@
-This is clanker heavy, experimental project done with coding 
-agent, to just verify different different things !!
+# clanker_jiken
 
-Right now, it just has few pi extensions suited to my usecase
+A collection of experimental Pi extensions and coding-agent tools built for personal workflows.
+
+## Review and memory extensions
+
+- [`pi-observational-memory`](./pi-observational-memory) — tiered, subprocess-backed observational memory for long-running Pi sessions.
+- [`pi-review-room`](./pi-review-room) — a Herdr-native interactive review subagent with child-pane curation, per-finding handling notes, and explicit handoff to the parent agent.
+
+Each package has its own README with installation, configuration, and usage instructions.
