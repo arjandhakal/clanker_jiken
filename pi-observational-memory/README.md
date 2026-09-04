@@ -97,28 +97,50 @@ folds each run into an `om.cost` ledger entry.
 ## Configuration
 
 Namespace `observational-memory` in `~/.pi/agent/settings.json` (global) or
-`.pi/settings.json` (project; overrides global):
+`.pi/settings.json` (project; overrides global).
 
-```jsonc
+The checked-in [`examples/settings.json`](./examples/settings.json) contains the actual tuned
+configuration used for this extension. In particular, frequent observer jobs use Luna at low
+reasoning effort, while the less frequent consolidation job uses Terra at medium effort:
+
+```json
 {
   "observational-memory": {
-    "chunkTokens": 5000,
+    "chunkTokens": 10000,
     "chunkOverlapTokens": 0,
-    "poolTargetTokens": 10000,           // buffer drains back toward this after consolidation
-    "consolidateAtPoolTokens": 20000,    // pool size that triggers a consolidation (200% of target)
-    "compactAtContextTokens": 100000,    // tune per model
-    "tailTokens": 20000,                 // verbatim tail; snaps to a chunk boundary
-    "journeyTargetTokens": 1000,         // pushed JOURNEY.md size; compress oldest segments past this
-    "observerConcurrency": 4,
+    "poolTargetTokens": 10000,
+    "consolidateAtPoolTokens": 20000,
+    "compactAtContextTokens": 150000,
+    "tailTokens": 20000,
+    "journeyTargetTokens": 1000,
+    "observerConcurrency": 2,
     "models": {
-      "observer":     { "provider": "openai-codex", "id": "gpt-5.6-sol", "thinking": "low" },
-      "consolidator": { "provider": "openai-codex", "id": "gpt-5.6-sol", "thinking": "medium" }
-    },
-    "passive": false,
-    "debugLog": false
+      "observer": {
+        "provider": "openai-codex",
+        "id": "gpt-5.6-luna",
+        "thinking": "low"
+      },
+      "consolidator": {
+        "provider": "openai-codex",
+        "id": "gpt-5.6-terra",
+        "thinking": "medium"
+      }
+    }
   }
 }
 ```
+
+### Reusing the same settings on another laptop
+
+1. Install the extension on the other laptop.
+2. Authenticate the `openai-codex` provider in Pi.
+3. Merge the `observational-memory` object from `examples/settings.json` into
+   `~/.pi/agent/settings.json`. Do not overwrite the whole settings file if it already contains
+   package registrations or other Pi settings.
+4. Start a new Pi session and run `/om on`; use `/om:status` to verify the selected worker models.
+
+To apply it to only one repository, merge the same object into that repository's
+`.pi/settings.json` instead.
 
 The worker model is provider-agnostic. Use `openai-codex` for ChatGPT/Codex OAuth or
 `openai` for direct OpenAI API-key access. Each role selects one model and effort level; the
