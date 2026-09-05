@@ -54,7 +54,7 @@ export const DEFAULTS: Config = {
 	chunkOverlapTokens: 0,
 	poolTargetTokens: 10_000,
 	consolidateAtPoolTokens: 15_000,
-	compactAtContextTokens: 150_000,
+	compactAtContextTokens: 100_000,
 	tailTokens: 20_000,
 	journeyTargetTokens: 1_000,
 	observerConcurrency: 4,

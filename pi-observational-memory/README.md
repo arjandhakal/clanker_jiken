@@ -110,7 +110,7 @@ reasoning effort, while the less frequent consolidation job uses Terra at medium
     "chunkOverlapTokens": 0,
     "poolTargetTokens": 10000,
     "consolidateAtPoolTokens": 20000,
-    "compactAtContextTokens": 150000,
+    "compactAtContextTokens": 100000,
     "tailTokens": 20000,
     "journeyTargetTokens": 1000,
     "observerConcurrency": 2,
