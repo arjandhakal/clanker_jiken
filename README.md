@@ -1,6 +1,10 @@
 # clanker_jiken
 
-A collection of experimental Pi extensions and coding-agent tools built for personal workflows.
+A collection of experimental browser extensions, Pi extensions, and coding-agent tools built for personal workflows.
+
+## Browser extensions
+
+- [`note-taker-extension`](./note-taker-extension) — Margin, a local-first ClojureScript Chrome extension for highlighting web passages, adding notes, and revisiting a searchable reading library.
 
 ## Review and memory extensions
 

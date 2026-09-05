@@ -1,0 +1,14 @@
+node_modules/
+.shadow-cljs/
+.cpcache/
+target/
+extension/js/
+dist/
+.nrepl-port
+playwright-report/
+test-results/
+.DS_Store
+
+# Local coding-agent session data
+.memory/
+.pi/

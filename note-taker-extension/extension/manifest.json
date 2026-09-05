@@ -1,0 +1,22 @@
+{
+  "manifest_version": 3,
+  "name": "Margin — Web Highlights & Notes",
+  "short_name": "Margin",
+  "version": "0.1.0",
+  "description": "Keep the passages that matter. Highlight, annotate, and revisit your reading, privately and locally.",
+  "minimum_chrome_version": "105",
+  "permissions": ["storage", "activeTab"],
+  "background": {"service_worker": "worker.js"},
+  "action": {
+    "default_title": "Margin — Your notes on this page",
+    "default_popup": "popup.html",
+    "default_icon": {"16": "icons/16.png", "32": "icons/32.png", "48": "icons/48.png", "128": "icons/128.png"}
+  },
+  "icons": {"16": "icons/16.png", "32": "icons/32.png", "48": "icons/48.png", "128": "icons/128.png"},
+  "content_scripts": [{
+    "matches": ["http://*/*", "https://*/*"],
+    "js": ["js/shared.js", "js/content.js"],
+    "run_at": "document_idle"
+  }],
+  "content_security_policy": {"extension_pages": "script-src 'self'; object-src 'none'"}
+}

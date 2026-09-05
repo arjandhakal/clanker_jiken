@@ -1,0 +1,19 @@
+{
+  "name": "margin",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A local-first web highlighter and notebook, written in ClojureScript.",
+  "scripts": {
+    "dev": "node scripts/watch.mjs",
+    "build": "shadow-cljs release extension",
+    "icons": "node scripts/icons.mjs",
+    "test": "shadow-cljs compile test && node target/tests.js",
+    "test:browser": "node test/browser.mjs",
+    "lint": "clj-kondo --lint src test/margin",
+    "package": "npm run build && node scripts/package.mjs"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.55.0",
+    "shadow-cljs": "^3.2.0"
+  }
+}

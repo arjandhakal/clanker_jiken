@@ -1,0 +1,18 @@
+{:source-paths ["src" "test"]
+ :dependencies []
+ :nrepl {:port 8777}
+ :builds
+ {:extension
+  {:target :browser
+   :output-dir "extension/js"
+   :asset-path "/js"
+   :modules {:shared {:entries [margin.model margin.async margin.ui]}
+             :background {:entries [margin.background] :depends-on #{:shared}}
+             :content {:entries [margin.content] :depends-on #{:shared}}
+             :library {:entries [margin.library] :depends-on #{:shared}}
+             :popup {:entries [margin.popup] :depends-on #{:shared}}}}
+  :test
+  {:target :node-test
+   :output-to "target/tests.js"
+   :ns-regexp "-test$"
+   :autorun false}}}
