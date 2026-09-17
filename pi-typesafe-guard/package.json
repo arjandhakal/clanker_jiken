@@ -1,0 +1,14 @@
+{
+  "name": "pi-typesafe-guard",
+  "version": "0.1.0",
+  "description": "Conservative human approval gates with privacy-preserving TypeSafe risk signals for Pi",
+  "type": "module",
+  "keywords": ["pi-package", "security", "approval", "typesafe"],
+  "files": ["src", "README.md", "RESEARCH.md"],
+  "pi": { "extensions": ["./src/index.ts"] },
+  "engines": { "node": ">=22" },
+  "scripts": { "test": "tsx --test tests/*.test.ts", "check": "tsc --noEmit" },
+  "dependencies": { "@napi-rs/keyring": "2.1.0" },
+  "peerDependencies": { "@earendil-works/pi-coding-agent": "*", "@earendil-works/pi-tui": "*" },
+  "devDependencies": { "@earendil-works/pi-coding-agent": "0.85.1", "@earendil-works/pi-tui": "0.85.1", "@types/node": "^24.0.0", "tsx": "^4.20.0", "typescript": "^5.9.0" }
+}

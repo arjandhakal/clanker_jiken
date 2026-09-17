@@ -11,4 +11,8 @@ A collection of experimental browser extensions, Pi extensions, and coding-agent
 - [`pi-observational-memory`](./pi-observational-memory) — tiered, subprocess-backed observational memory for long-running Pi sessions.
 - [`pi-review-room`](./pi-review-room) — a Herdr-native interactive review subagent with child-pane curation, per-finding handling notes, and explicit handoff to the parent agent.
 
+## Safety extensions
+
+- [`pi-typesafe-guard`](./pi-typesafe-guard) — conservative human approval gates for shell, file mutation, GitHub, and custom-tool actions, with optional metadata-only TypeSafe risk signals and OS credential storage.
+
 Each package has its own README with installation, configuration, and usage instructions.
