@@ -125,15 +125,17 @@ The extension registers `research_kb` with these actions:
 
 The bundled skill encourages fast code discovery with `fffind`/`ffgrep` when available, followed by reading authoritative files, callers, tests, and configuration. Web research uses current search and primary pages where appropriate.
 
-## Search and JEV
+## Search and Jev
 
-The installed `pi-jev-auto-mode` package is a semantic permission gate, not a repository search engine, so this extension does not misuse it for retrieval. It instead uses:
+Version 0.1 keeps retrieval local and deterministic:
 
-- the compact research catalog for quick prior-knowledge lookup
-- built-in full-text KB search
-- Pi's `fffind` and `ffgrep` tools for fast codebase path/content discovery
+- the compact research catalog provides quick prior-knowledge lookup
+- built-in full-text search finds research-note candidates
+- Pi's `fffind` and `ffgrep` tools provide fast codebase path/content discovery
 
-JEV still applies normally to commands according to its own permission policy.
+A future hybrid mode can use TypeSafe's Jev model as a fast semantic reranker: local search first gathers bounded candidates, then Jev judges each candidate's relevance to the research question and returns calibrated probabilities. Jev does not replace the local index because it only evaluates the state supplied in a request.
+
+This first version deliberately does not make those API calls. It therefore works without a TypeSafe key, keeps note search local, and avoids coupling retrieval to `pi-jev-auto-mode`. That extension can continue using Jev independently for permission decisions.
 
 ## Environment variables
 
