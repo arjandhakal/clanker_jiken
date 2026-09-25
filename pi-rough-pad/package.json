@@ -1,0 +1,16 @@
+{
+  "name": "pi-rough-pad",
+  "version": "0.1.0",
+  "description": "Pi extension for repo-scoped rough Markdown pads that agents and humans can share without committing notes.",
+  "type": "module",
+  "license": "MIT",
+  "keywords": ["pi-package", "pi", "extension", "rough-pad", "scratchpad", "notes"],
+  "pi": {
+    "extensions": ["./extensions/index.ts"]
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-ai": "*",
+    "typebox": "*"
+  }
+}
