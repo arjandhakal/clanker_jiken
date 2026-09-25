@@ -1,16 +1,12 @@
 # pi-rough-pad
 
-Repo-scoped Markdown rough pads for Pi. Use them for messy feature notes, decisions, plans, open questions, and reminders that should be easy for both you and the agent to update but should never be committed.
-
-Pads are stored outside the repository by default:
+Repo-scoped Markdown rough pads for Pi. A repository can have many pads, while every Pi session independently selects which pad its agent should use. Pads live outside git by default.
 
 ```text
 ~/.pi/agent/rough-pad/
 ```
 
-The extension keys pads by the current git repository root, so every Pi session in the same repo can find the same pad.
-
-## Install
+## Install globally
 
 From this repository:
 
@@ -18,65 +14,120 @@ From this repository:
 pi install ./pi-rough-pad
 ```
 
+The package is added to `~/.pi/agent/settings.json` and becomes available in every Pi project. Reload an already-running Pi session with `/reload` or start a new session after installation or upgrades.
+
 For one-off testing:
 
 ```bash
 pi -e ./pi-rough-pad/extensions/index.ts
 ```
 
+## Mental model
+
+- **Repository:** owns a collection of named pads.
+- **Selected pad:** the default pad for commands and agent tool calls in one Pi session.
+- **Loaded pad:** the last pad whose contents were supplied to that session's agent.
+- **Current:** the loaded file has not changed since it was loaded.
+- **Stale:** the file changed after loading; read or load it again.
+
+Selection is stored in the Pi session transcript, not in a repo-global setting. Parallel agents in the same repository can therefore select different pads without changing each other's target.
+
+The footer shows the current state:
+
+```text
+pad:auth-refactor ✓
+pad:api-work · loaded:old-plan!
+```
+
+`✓` means the selected pad is loaded and current. `!` means the last-loaded content is stale or missing.
+
+## Typical workflow
+
+```text
+/pad new auth-refactor
+/pad open
+/pad load
+```
+
+In another Pi session:
+
+```text
+/pad new billing-fix
+/pad load
+```
+
+Each agent now has a different selected pad.
+
 ## Commands
 
 ```text
-/pad                     Show active pad status and usage
+/pad                     Show selected and loaded status
 /pad help                Show command help
-/pad path [name]         Show the pad file path
-/pad open [name]         Open the pad in $PI_ROUGH_PAD_EDITOR, $VISUAL, $EDITOR, nvim, vi, or nano
-/pad read [name]         Display the pad contents
+/pad list                List pads with state markers
+/pad new <name>          Create and select a pad for this session
+/pad switch [name]       Select an existing pad; opens a picker when omitted
+/pad use [name]          Alias for switch
+/pad active              Show detailed status
+/pad load [name]         Select and send a pad's contents to the agent
+/pad open [name]         Open a pad in the terminal editor
+/pad read [name]         Display a pad to you without loading it for the agent
 /pad show [name]         Alias for read
-/pad load [name]         Send the pad contents to the agent as a user message
-/pad use <name>          Switch the active pad for this repo, creating it if needed
-/pad active              Show the active pad name
-/pad list                List pads for this repo
-/pad append <text>       Append text to the active pad
-/pad note <text>         Append a timestamped note to the active pad
-/pad write <text>        Replace the active pad body with text
+/pad path [name]         Show the pad file path
+/pad append <text>       Append text to the selected pad
+/pad note <text>         Append a timestamped note
+/pad write <text>        Replace the selected pad's contents
 /pad clear [name]        Reset a pad to the default template
-/pad delete [name]       Delete a pad file
+/pad delete [name]       Delete a pad
 ```
 
-Pad names are optional for commands that read/open/delete. If omitted, the repo's active pad is used. The initial active pad defaults to the current git branch name, or `default` if no branch is available.
+List markers:
 
-## Agent tool
+- `▶` — selected by this Pi session
+- `●` — loaded by the agent and unchanged
+- `!` — loaded but changed or deleted since loading
 
-The extension registers a model-callable `rough_pad` tool with actions:
+Passing `[name]` accesses that named pad without silently changing the session selection, except `/pad load <name>`, which deliberately selects and loads it.
 
-- `read`
-- `append`
-- `note`
-- `write`
-- `replace`
-- `clear`
-- `delete`
-- `path`
-- `list`
-- `use`
+## Agent usage
 
-Example prompts:
+The extension registers a model-callable `rough_pad` tool. The agent can:
+
+- list available pads and see selected/loaded state
+- select a pad for its current session
+- read and load it
+- append notes
+- perform exact replacements
+- rewrite, clear, or delete pads
+
+Example requests:
 
 ```text
-Read my rough pad and continue from the current plan.
-Update the rough pad with the decision we just made.
-Append the open questions to the rough pad.
-Replace the stale implementation notes in the rough pad.
+List my rough pads and ask which one I mean.
+Use the auth-refactor pad for this session.
+Read the selected rough pad and continue from its plan.
+Add our decision to the selected rough pad.
+Check whether the loaded pad is stale, then reread it if needed.
 ```
+
+If you name a pad when asking the agent to read it, that pad becomes selected and loaded for that Pi session.
+
+## Editor selection
+
+`/pad open` uses the first available option:
+
+1. `PI_ROUGH_PAD_EDITOR`
+2. `VISUAL`
+3. `EDITOR`
+4. `nvim`
+5. `vim`
+6. `vi`
+7. `nano`
 
 ## Configuration
 
-Environment variables:
-
 - `PI_ROUGH_PAD_DIR` — override the storage directory.
-- `PI_ROUGH_PAD_EDITOR` — preferred editor for `/pad open`.
+- `PI_ROUGH_PAD_EDITOR` — override the terminal editor command.
 
 ## Safety
 
-Rough pads are stored outside the repo by default, under `~/.pi/agent/rough-pad`, so they are not accidentally committed. If you set `PI_ROUGH_PAD_DIR` to a repo-local path, add that path to `.git/info/exclude` or `.gitignore` yourself.
+Pads are stored outside the repository under `~/.pi/agent/rough-pad` by default, so they cannot be accidentally committed. If `PI_ROUGH_PAD_DIR` points inside a repository, exclude that path with `.git/info/exclude` or `.gitignore`.

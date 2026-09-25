@@ -1,17 +1,21 @@
 import { StringEnum } from "@earendil-works/pi-ai";
-import { type ExtensionAPI, type ExtensionCommandContext, type ExtensionContext, getAgentDir, withFileMutationQueue } from "@earendil-works/pi-coding-agent";
-import { access, appendFile, mkdir, readFile, readdir, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
+import {
+	type ExtensionAPI,
+	type ExtensionCommandContext,
+	type ExtensionContext,
+	getAgentDir,
+	withFileMutationQueue,
+} from "@earendil-works/pi-coding-agent";
 import { constants } from "node:fs";
+import { appendFile, access, mkdir, readFile, readdir, realpath, rm, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
-import { homedir } from "node:os";
 import { createHash } from "node:crypto";
 import { execFile, spawnSync } from "node:child_process";
 import { promisify } from "node:util";
 import { Type } from "typebox";
 
 const execFileAsync = promisify(execFile);
-
-const STORE_VERSION = 1;
+const SESSION_ENTRY = "rough-pad-session-state";
 const MAX_MODEL_CHARS = 60_000;
 const MAX_NOTIFY_CHARS = 20_000;
 const PAD_NAME_MAX = 80;
@@ -27,30 +31,17 @@ type RepoInfo = {
 	dirName: string;
 };
 
-type RepoState = {
+type LoadedPad = {
+	name: string;
+	contentHash: string;
+	loadedAt: number;
+};
+
+type SessionPadState = {
 	repoKey: string;
-	repoPath: string;
-	repoName: string;
-	activePad: string;
-	createdAt: number;
+	selectedPad: string;
+	loaded?: LoadedPad;
 	updatedAt: number;
-};
-
-type PadIndex = {
-	version: typeof STORE_VERSION;
-	repos: Record<string, RepoState>;
-};
-
-type RoughPadDetails = {
-	action: PadAction;
-	repo: { name: string; path: string; branch?: string; key: string };
-	name?: string;
-	path?: string;
-	activePad?: string;
-	pads?: string[];
-	changed?: boolean;
-	deleted?: boolean;
-	error?: string;
 };
 
 type PadTarget = {
@@ -59,9 +50,23 @@ type PadTarget = {
 	path: string;
 };
 
+type RoughPadDetails = {
+	action: PadAction;
+	repo: { name: string; path: string; branch?: string; key: string };
+	name?: string;
+	path?: string;
+	selectedPad?: string;
+	loadedPad?: string;
+	loadedState?: "current" | "stale" | "missing";
+	pads?: string[];
+	changed?: boolean;
+	deleted?: boolean;
+	error?: string;
+};
+
 const RoughPadParams = Type.Object({
 	action: StringEnum(PAD_ACTIONS),
-	name: Type.Optional(Type.String({ description: "Optional pad name. Defaults to the active pad for the current repo." })),
+	name: Type.Optional(Type.String({ description: "Optional pad name. Defaults to this Pi session's selected pad." })),
 	text: Type.Optional(Type.String({ description: "Text for append, note, write, or replace." })),
 	oldText: Type.Optional(Type.String({ description: "Exact text to replace when action is replace. Must occur exactly once." })),
 });
@@ -70,16 +75,8 @@ function storageRoot() {
 	return process.env.PI_ROUGH_PAD_DIR?.trim() || join(getAgentDir(), "rough-pad");
 }
 
-function indexPath() {
-	return join(storageRoot(), "index.json");
-}
-
 function padsRoot() {
 	return join(storageRoot(), "pads");
-}
-
-function emptyIndex(): PadIndex {
-	return { version: STORE_VERSION, repos: {} };
 }
 
 function hash(text: string) {
@@ -145,73 +142,15 @@ async function getRepoInfo(cwd: string): Promise<RepoInfo> {
 	};
 }
 
-async function readIndex(): Promise<PadIndex> {
+async function legacyDefault(repo: RepoInfo) {
 	try {
-		const raw = await readFile(indexPath(), "utf8");
-		const parsed = JSON.parse(raw) as Partial<PadIndex>;
-		return {
-			version: STORE_VERSION,
-			repos: parsed.repos && typeof parsed.repos === "object" ? (parsed.repos as Record<string, RepoState>) : {},
-		};
-	} catch (err) {
-		if ((err as NodeJS.ErrnoException).code === "ENOENT") return emptyIndex();
-		throw new Error(`Could not read rough-pad index at ${indexPath()}: ${err instanceof Error ? err.message : String(err)}`);
+		const raw = await readFile(join(storageRoot(), "index.json"), "utf8");
+		const parsed = JSON.parse(raw) as { repos?: Record<string, { activePad?: unknown }> };
+		const active = parsed.repos?.[repo.key]?.activePad;
+		return typeof active === "string" && active.trim() ? slugify(active) : undefined;
+	} catch {
+		return undefined;
 	}
-}
-
-async function writeIndex(index: PadIndex) {
-	const path = indexPath();
-	await mkdir(dirname(path), { recursive: true });
-	await withFileMutationQueue(path, async () => {
-		const sorted: PadIndex = {
-			version: STORE_VERSION,
-			repos: Object.fromEntries(Object.entries(index.repos).sort(([a], [b]) => a.localeCompare(b))),
-		};
-		const tmp = `${path}.${process.pid}.${Date.now()}.tmp`;
-		await writeFile(tmp, `${JSON.stringify(sorted, null, 2)}\n`, "utf8");
-		await rename(tmp, path);
-	});
-}
-
-async function ensureRepoState(repo: RepoInfo) {
-	const index = await readIndex();
-	const existing = index.repos[repo.key];
-	const now = Date.now();
-	const state: RepoState = existing
-		? {
-				...existing,
-				repoPath: repo.path,
-				repoName: repo.name,
-				updatedAt: now,
-			}
-		: {
-				repoKey: repo.key,
-				repoPath: repo.path,
-				repoName: repo.name,
-				activePad: defaultPadName(repo),
-				createdAt: now,
-				updatedAt: now,
-			};
-	index.repos[repo.key] = state;
-	await writeIndex(index);
-	return state;
-}
-
-async function setActivePad(repo: RepoInfo, name: string) {
-	const normalized = slugify(name);
-	const index = await readIndex();
-	const existing = index.repos[repo.key];
-	const now = Date.now();
-	index.repos[repo.key] = {
-		repoKey: repo.key,
-		repoPath: repo.path,
-		repoName: repo.name,
-		activePad: normalized,
-		createdAt: existing?.createdAt ?? now,
-		updatedAt: now,
-	};
-	await writeIndex(index);
-	return normalized;
 }
 
 function padDirectory(repo: RepoInfo) {
@@ -227,30 +166,17 @@ function padTemplate(repo: RepoInfo, name: string) {
 	return `# Rough Pad: ${name}\n\nRepo: \`${repo.path}\`\nBranch: \`${repo.branch ?? "unknown"}\`\nCreated: ${now}\nUpdated: ${now}\nStorage: managed by pi-rough-pad outside the repository\n\n## Current Plan\n\n\n## Decisions\n\n\n## Open Questions\n\n\n## Notes\n`;
 }
 
-async function resolveTarget(ctx: ExtensionContext | ExtensionCommandContext, maybeName?: string, create = true): Promise<PadTarget> {
-	const repo = await getRepoInfo(ctx.cwd);
-	const state = await ensureRepoState(repo);
-	const name = slugify(maybeName || state.activePad || defaultPadName(repo));
-	const path = padFilePath(repo, name);
-	if (create) await ensurePadFile({ repo, name, path });
-	return { repo, name, path };
-}
-
 async function ensurePadFile(target: PadTarget) {
 	await mkdir(dirname(target.path), { recursive: true });
-	if (!(await pathExists(target.path))) {
-		await withFileMutationQueue(target.path, async () => {
-			if (!(await pathExists(target.path))) {
-				await writeFile(target.path, padTemplate(target.repo, target.name), "utf8");
-			}
-		});
-	}
+	if (await pathExists(target.path)) return;
+	await withFileMutationQueue(target.path, async () => {
+		if (!(await pathExists(target.path))) await writeFile(target.path, padTemplate(target.repo, target.name), "utf8");
+	});
 }
 
 async function listPads(repo: RepoInfo) {
-	const dir = padDirectory(repo);
 	try {
-		const entries = await readdir(dir, { withFileTypes: true });
+		const entries = await readdir(padDirectory(repo), { withFileTypes: true });
 		return entries
 			.filter((entry) => entry.isFile() && entry.name.endsWith(".md"))
 			.map((entry) => entry.name.slice(0, -3))
@@ -261,23 +187,6 @@ async function listPads(repo: RepoInfo) {
 	}
 }
 
-async function padStats(path: string) {
-	try {
-		return await stat(path);
-	} catch {
-		return undefined;
-	}
-}
-
-function repoDetails(repo: RepoInfo) {
-	return { name: repo.name, path: repo.path, branch: repo.branch, key: repo.key };
-}
-
-function toolTextFor(action: PadAction, target: PadTarget | undefined, message: string) {
-	const prefix = target ? `[rough-pad:${target.name}] ` : "[rough-pad] ";
-	return `${prefix}${message}`;
-}
-
 async function readPad(target: PadTarget) {
 	await ensurePadFile(target);
 	return readFile(target.path, "utf8");
@@ -286,7 +195,8 @@ async function readPad(target: PadTarget) {
 async function appendToPad(target: PadTarget, text: string) {
 	await ensurePadFile(target);
 	await withFileMutationQueue(target.path, async () => {
-		const prefix = (await readFile(target.path, "utf8")).endsWith("\n") ? "" : "\n";
+		const current = await readFile(target.path, "utf8");
+		const prefix = current.endsWith("\n") ? "" : "\n";
 		await appendFile(target.path, `${prefix}\n${text.trimEnd()}\n`, "utf8");
 	});
 }
@@ -304,47 +214,32 @@ async function replaceInPad(target: PadTarget, oldText: string, newText: string)
 		const content = await readFile(target.path, "utf8");
 		const first = content.indexOf(oldText);
 		if (first === -1) return { changed: false, error: "oldText was not found" };
-		const second = content.indexOf(oldText, first + oldText.length);
-		if (second !== -1) return { changed: false, error: "oldText occurs more than once; provide a unique exact oldText" };
+		if (content.indexOf(oldText, first + oldText.length) !== -1) {
+			return { changed: false, error: "oldText occurs more than once; provide unique exact text" };
+		}
 		await writeFile(target.path, content.slice(0, first) + newText + content.slice(first + oldText.length), "utf8");
 		return { changed: true };
 	});
 }
 
-async function clearPad(target: PadTarget) {
-	await writePad(target, padTemplate(target.repo, target.name));
-}
-
-async function deletePad(target: PadTarget) {
-	try {
-		await rm(target.path, { force: true });
-		return true;
-	} catch {
-		return false;
-	}
-}
-
 function timestampedNote(text: string) {
-	const stamp = new Date().toLocaleString();
-	return `### ${stamp}\n\n${text.trimEnd()}`;
+	return `### ${new Date().toLocaleString()}\n\n${text.trimEnd()}`;
 }
 
-function helpText() {
-	return [
-		"Rough pad commands:",
-		"/pad path [name]       Show pad path",
-		"/pad open [name]       Open in PI_ROUGH_PAD_EDITOR, VISUAL, EDITOR, nvim, vi, or nano",
-		"/pad read [name]       Display pad contents",
-		"/pad load [name]       Send pad contents to the agent as context",
-		"/pad use <name>        Switch active pad for this repo",
-		"/pad active            Show active pad",
-		"/pad list              List repo pads",
-		"/pad append <text>     Append text to active pad",
-		"/pad note <text>       Append timestamped note to active pad",
-		"/pad write <text>      Replace active pad content",
-		"/pad clear [name]      Reset pad template",
-		"/pad delete [name]     Delete pad file",
-	].join("\n");
+function repoDetails(repo: RepoInfo) {
+	return { name: repo.name, path: repo.path, branch: repo.branch, key: repo.key };
+}
+
+async function loadedState(state: SessionPadState | undefined, repo: RepoInfo): Promise<"current" | "stale" | "missing" | undefined> {
+	if (!state?.loaded) return undefined;
+	const path = padFilePath(repo, state.loaded.name);
+	try {
+		const content = await readFile(path, "utf8");
+		return hash(content) === state.loaded.contentHash ? "current" : "stale";
+	} catch (err) {
+		if ((err as NodeJS.ErrnoException).code === "ENOENT") return "missing";
+		throw err;
+	}
 }
 
 function splitCommand(args: string) {
@@ -354,20 +249,25 @@ function splitCommand(args: string) {
 	return { command: (match?.[1] ?? "status").toLowerCase(), rest: match?.[2]?.trim() ?? "" };
 }
 
-async function showStatus(ctx: ExtensionCommandContext) {
-	const target = await resolveTarget(ctx);
-	const stats = await padStats(target.path);
-	ctx.ui.notify(
-		[
-			`Active rough pad: ${target.name}`,
-			`Path: ${target.path}`,
-			`Repo: ${target.repo.path}`,
-			stats ? `Size: ${stats.size} bytes` : "Size: not created yet",
-			"",
-			"Use /pad help for commands. Ask the agent to read or update the rough pad when useful.",
-		].join("\n"),
-		"info",
-	);
+function helpText() {
+	return [
+		"Rough pad commands (selection is per Pi session):",
+		"/pad                     Show selected/loaded status",
+		"/pad list                List pads with selected and loaded markers",
+		"/pad new <name>          Create and select a pad",
+		"/pad switch [name]       Select a pad (picker when name is omitted)",
+		"/pad load [name]         Select and send a pad to the agent",
+		"/pad open [name]         Open a pad in your terminal editor",
+		"/pad read [name]         Display a pad to you (does not load it for the agent)",
+		"/pad path [name]         Show a pad's file path",
+		"/pad append <text>       Append to the selected pad",
+		"/pad note <text>         Append a timestamped note",
+		"/pad write <text>        Replace the selected pad",
+		"/pad clear [name]        Reset a pad to the template",
+		"/pad delete [name]       Delete a pad",
+		"",
+		"Markers: ▶ selected by this session, ● loaded and current, ! loaded but stale/missing.",
+	].join("\n");
 }
 
 function editorCommand() {
@@ -387,7 +287,6 @@ async function openPadInEditor(ctx: ExtensionCommandContext, target: PadTarget) 
 		ctx.ui.notify(`Open this file in your editor:\n${target.path}`, "info");
 		return;
 	}
-
 	const exitCode = await ctx.ui.custom<number | null>((tui, _theme, _kb, done) => {
 		tui.stop();
 		process.stdout.write("\x1b[2J\x1b[H");
@@ -401,138 +300,246 @@ async function openPadInEditor(ctx: ExtensionCommandContext, target: PadTarget) 
 		done(result.status);
 		return { render: () => [], invalidate: () => {} };
 	});
-
 	if (exitCode === 0) ctx.ui.notify(`Closed rough pad ${target.name}`, "info");
 	else ctx.ui.notify(`Editor exited with code ${exitCode ?? 1}. Path: ${target.path}`, "warning");
 }
 
-async function getPadNameCompletions(prefix: string, ctx?: ExtensionCommandContext) {
-	if (!ctx) return null;
-	const repo = await getRepoInfo(ctx.cwd);
-	const pads = await listPads(repo);
-	const needle = prefix.trim().toLowerCase();
-	return pads.filter((name) => !needle || name.toLowerCase().startsWith(needle)).slice(0, 50).map((name) => ({ value: name, label: name }));
-}
-
 export default function roughPadExtension(pi: ExtensionAPI) {
+	let sessionState: SessionPadState | undefined;
+
+	async function reconstructState(ctx: ExtensionContext) {
+		const repo = await getRepoInfo(ctx.cwd);
+		sessionState = undefined;
+		const branch = ctx.sessionManager.getBranch();
+		for (let i = branch.length - 1; i >= 0; i--) {
+			const entry = branch[i];
+			if (entry.type !== "custom" || entry.customType !== SESSION_ENTRY) continue;
+			const data = entry.data as SessionPadState | undefined;
+			if (data?.repoKey === repo.key && typeof data.selectedPad === "string") {
+				sessionState = data;
+				break;
+			}
+		}
+		if (!sessionState) {
+			sessionState = {
+				repoKey: repo.key,
+				selectedPad: (await legacyDefault(repo)) ?? defaultPadName(repo),
+				updatedAt: Date.now(),
+			};
+		}
+		await refreshStatus(ctx, repo);
+	}
+
+	async function ensureState(ctx: ExtensionContext | ExtensionCommandContext, repo?: RepoInfo) {
+		const currentRepo = repo ?? (await getRepoInfo(ctx.cwd));
+		if (!sessionState || sessionState.repoKey !== currentRepo.key) await reconstructState(ctx);
+		return sessionState as SessionPadState;
+	}
+
+	function persistState(next: SessionPadState) {
+		sessionState = next;
+		pi.appendEntry<SessionPadState>(SESSION_ENTRY, next);
+	}
+
+	async function selectPad(ctx: ExtensionContext | ExtensionCommandContext, repo: RepoInfo, name: string, create = true) {
+		const normalized = slugify(name);
+		const current = await ensureState(ctx, repo);
+		persistState({ ...current, repoKey: repo.key, selectedPad: normalized, updatedAt: Date.now() });
+		const target = { repo, name: normalized, path: padFilePath(repo, normalized) };
+		if (create) await ensurePadFile(target);
+		await refreshStatus(ctx, repo);
+		return target;
+	}
+
+	async function targetFor(ctx: ExtensionContext | ExtensionCommandContext, maybeName?: string, create = true) {
+		const repo = await getRepoInfo(ctx.cwd);
+		const state = await ensureState(ctx, repo);
+		const name = slugify(maybeName || state.selectedPad || defaultPadName(repo));
+		const target = { repo, name, path: padFilePath(repo, name) };
+		if (create) await ensurePadFile(target);
+		return target;
+	}
+
+	async function markLoaded(ctx: ExtensionContext | ExtensionCommandContext, target: PadTarget, content: string) {
+		const current = await ensureState(ctx, target.repo);
+		persistState({
+			...current,
+			repoKey: target.repo.key,
+			selectedPad: target.name,
+			loaded: { name: target.name, contentHash: hash(content), loadedAt: Date.now() },
+			updatedAt: Date.now(),
+		});
+		await refreshStatus(ctx, target.repo);
+	}
+
+	async function refreshStatus(ctx: ExtensionContext | ExtensionCommandContext, repo?: RepoInfo) {
+		const currentRepo = repo ?? (await getRepoInfo(ctx.cwd));
+		const state = sessionState?.repoKey === currentRepo.key ? sessionState : undefined;
+		if (!state) {
+			ctx.ui.setStatus("rough-pad", undefined);
+			return;
+		}
+		const loaded = await loadedState(state, currentRepo);
+		let text = `pad:${state.selectedPad}`;
+		if (state.loaded) {
+			const suffix = loaded === "current" ? "✓" : "!";
+			text += state.loaded.name === state.selectedPad ? ` ${suffix}` : ` · loaded:${state.loaded.name}${suffix}`;
+		}
+		ctx.ui.setStatus("rough-pad", ctx.ui.theme.fg(loaded === "stale" || loaded === "missing" ? "warning" : "dim", text));
+	}
+
+	async function choosePad(ctx: ExtensionCommandContext, repo: RepoInfo) {
+		const pads = await listPads(repo);
+		if (!pads.length) return undefined;
+		if (!ctx.hasUI) return undefined;
+		const state = await ensureState(ctx, repo);
+		const labels = pads.map((name) => (name === state.selectedPad ? `${name}  [selected]` : name));
+		const choice = await ctx.ui.select("Select rough pad for this Pi session", labels);
+		return choice?.replace(/\s+\[selected\]$/, "");
+	}
+
+	async function statusText(ctx: ExtensionCommandContext) {
+		const repo = await getRepoInfo(ctx.cwd);
+		const state = await ensureState(ctx, repo);
+		const loadState = await loadedState(state, repo);
+		const selectedPath = padFilePath(repo, state.selectedPad);
+		return [
+			`Selected for this Pi session: ${state.selectedPad}`,
+			`Selected path: ${selectedPath}`,
+			state.loaded
+				? `Last loaded for agent: ${state.loaded.name} (${loadState}; ${new Date(state.loaded.loadedAt).toLocaleString()})`
+				: "Last loaded for agent: none",
+			`Repo: ${repo.path}`,
+			"",
+			"Use /pad list to discover pads, /pad switch to select one, or /pad load to give one to the agent.",
+		].join("\n");
+	}
+
+	async function listText(ctx: ExtensionContext | ExtensionCommandContext, repo: RepoInfo) {
+		const state = await ensureState(ctx, repo);
+		const loadState = await loadedState(state, repo);
+		const pads = await listPads(repo);
+		if (!pads.length) return "No rough pads yet. Create one with /pad new <name>.";
+		const lines = await Promise.all(
+			pads.map(async (name) => {
+				const selected = name === state.selectedPad ? "▶" : " ";
+				const loaded = name === state.loaded?.name ? (loadState === "current" ? "●" : "!") : " ";
+				const info = await stat(padFilePath(repo, name)).catch(() => undefined);
+				const meta = info ? `${info.size} B · ${info.mtime.toLocaleString()}` : "missing";
+				return `${selected}${loaded} ${name}  (${meta})`;
+			}),
+		);
+		return `${lines.join("\n")}\n\n▶ selected by this session · ● loaded/current · ! loaded/stale or missing`;
+	}
+
+	async function afterMutation(ctx: ExtensionContext | ExtensionCommandContext, repo: RepoInfo) {
+		await refreshStatus(ctx, repo);
+	}
+
+	pi.on("session_start", async (_event, ctx) => reconstructState(ctx));
+	pi.on("session_tree", async (_event, ctx) => reconstructState(ctx));
+	pi.on("session_shutdown", async (_event, ctx) => ctx.ui.setStatus("rough-pad", undefined));
+
 	pi.registerCommand("pad", {
-		description: "Manage repo-scoped rough Markdown pads. Usage: /pad help",
+		description: "Manage session-selected repo rough pads. Usage: /pad help",
 		getArgumentCompletions: async (prefix) => {
 			const first = prefix.trimStart();
-			if (!first.includes(" ")) {
-				const commands = ["help", "path", "open", "read", "show", "load", "use", "active", "list", "append", "note", "write", "clear", "delete"];
-				return commands.filter((cmd) => cmd.startsWith(first.toLowerCase())).map((cmd) => ({ value: cmd, label: cmd }));
-			}
-			return null;
+			if (first.includes(" ")) return null;
+			const commands = ["help", "status", "list", "new", "switch", "use", "active", "load", "open", "read", "show", "path", "append", "note", "write", "clear", "delete"];
+			return commands.filter((cmd) => cmd.startsWith(first.toLowerCase())).map((cmd) => ({ value: cmd, label: cmd }));
 		},
 		handler: async (args, ctx) => {
 			const { command, rest } = splitCommand(args);
-
 			try {
 				switch (command) {
 					case "status":
-						await showStatus(ctx);
+					case "active":
+						ctx.ui.notify(await statusText(ctx), "info");
 						return;
 					case "help":
 						ctx.ui.notify(helpText(), "info");
 						return;
+					case "list": {
+						const repo = await getRepoInfo(ctx.cwd);
+						ctx.ui.notify(await listText(ctx, repo), "info");
+						return;
+					}
+					case "new": {
+						let name = rest;
+						if (!name && ctx.hasUI) name = (await ctx.ui.input("New rough pad name", "feature-name"))?.trim() ?? "";
+						if (!name) return ctx.ui.notify("Usage: /pad new <name>", "warning");
+						const repo = await getRepoInfo(ctx.cwd);
+						const target = await selectPad(ctx, repo, name);
+						ctx.ui.notify(`Created and selected ${target.name} for this Pi session.\n${target.path}`, "info");
+						return;
+					}
+					case "switch":
+					case "use": {
+						const repo = await getRepoInfo(ctx.cwd);
+						const name = rest || (await choosePad(ctx, repo));
+						if (!name) return ctx.ui.notify("No pad selected. Use /pad new <name> or /pad switch <name>.", "warning");
+						const target = await selectPad(ctx, repo, name);
+						ctx.ui.notify(`Selected ${target.name} for this Pi session.\n${target.path}`, "info");
+						return;
+					}
 					case "path": {
-						const target = await resolveTarget(ctx, rest || undefined);
+						const target = await targetFor(ctx, rest || undefined, false);
 						ctx.ui.notify(target.path, "info");
 						return;
 					}
 					case "open":
 					case "edit": {
-						const target = await resolveTarget(ctx, rest || undefined);
+						const target = await targetFor(ctx, rest || undefined);
 						await openPadInEditor(ctx, target);
+						await afterMutation(ctx, target.repo);
 						return;
 					}
 					case "read":
 					case "show": {
-						const target = await resolveTarget(ctx, rest || undefined);
+						const target = await targetFor(ctx, rest || undefined);
 						ctx.ui.notify(truncate(await readPad(target), MAX_NOTIFY_CHARS), "info");
 						return;
 					}
 					case "load": {
-						const target = await resolveTarget(ctx, rest || undefined);
+						const repo = await getRepoInfo(ctx.cwd);
+						let name = rest;
+						if (!name && ctx.hasUI) name = (await choosePad(ctx, repo)) ?? (await ensureState(ctx, repo)).selectedPad;
+						const target = await selectPad(ctx, repo, name || (await ensureState(ctx, repo)).selectedPad);
 						const content = await readPad(target);
-						const message = `Rough pad \"${target.name}\" for repo ${target.repo.name} (${target.repo.path}):\n\n${truncate(content)}\n\nPlease use this rough pad as working context for this session.`;
+						await markLoaded(ctx, target, content);
+						const message = `Rough pad \"${target.name}\" for ${repo.name} (${repo.path}):\n\n${truncate(content)}\n\nUse this as working context. When asked to update the rough pad, update this selected pad.`;
 						if (ctx.isIdle()) pi.sendUserMessage(message);
 						else pi.sendUserMessage(message, { deliverAs: "followUp" });
-						ctx.ui.notify(`Loaded rough pad ${target.name} into the conversation.`, "info");
+						ctx.ui.notify(`Selected and loaded ${target.name} for the agent.`, "info");
 						return;
 					}
-					case "use": {
-						if (!rest) {
-							ctx.ui.notify("Usage: /pad use <name>", "warning");
-							return;
-						}
-						const repo = await getRepoInfo(ctx.cwd);
-						const name = await setActivePad(repo, rest);
-						const target = await resolveTarget(ctx, name);
-						ctx.ui.notify(`Active rough pad is now ${target.name}\n${target.path}`, "info");
-						return;
-					}
-					case "active": {
-						const target = await resolveTarget(ctx);
-						ctx.ui.notify(target.name, "info");
-						return;
-					}
-					case "list": {
-						const repo = await getRepoInfo(ctx.cwd);
-						await ensureRepoState(repo);
-						const pads = await listPads(repo);
-						ctx.ui.notify(pads.length ? pads.map((name) => `- ${name}`).join("\n") : "No rough pads yet for this repo.", "info");
-						return;
-					}
-					case "append": {
-						if (!rest) {
-							ctx.ui.notify("Usage: /pad append <text>", "warning");
-							return;
-						}
-						const target = await resolveTarget(ctx);
-						await appendToPad(target, rest);
-						ctx.ui.notify(`Appended to rough pad ${target.name}.`, "info");
-						return;
-					}
-					case "note": {
-						if (!rest) {
-							ctx.ui.notify("Usage: /pad note <text>", "warning");
-							return;
-						}
-						const target = await resolveTarget(ctx);
-						await appendToPad(target, timestampedNote(rest));
-						ctx.ui.notify(`Added note to rough pad ${target.name}.`, "info");
-						return;
-					}
+					case "append":
+					case "note":
 					case "write": {
-						if (!rest) {
-							ctx.ui.notify("Usage: /pad write <text>", "warning");
-							return;
-						}
-						const target = await resolveTarget(ctx);
-						await writePad(target, rest);
-						ctx.ui.notify(`Rewrote rough pad ${target.name}.`, "info");
+						if (!rest) return ctx.ui.notify(`Usage: /pad ${command} <text>`, "warning");
+						const target = await targetFor(ctx);
+						if (command === "append") await appendToPad(target, rest);
+						else if (command === "note") await appendToPad(target, timestampedNote(rest));
+						else await writePad(target, rest);
+						await afterMutation(ctx, target.repo);
+						ctx.ui.notify(`${command === "write" ? "Rewrote" : "Updated"} ${target.name}.`, "info");
 						return;
 					}
 					case "clear": {
-						const target = await resolveTarget(ctx, rest || undefined);
-						if (ctx.hasUI && !(await ctx.ui.confirm("Clear rough pad?", `Reset ${target.name} to the default template?`))) {
-							ctx.ui.notify("Clear cancelled", "info");
-							return;
-						}
-						await clearPad(target);
-						ctx.ui.notify(`Cleared rough pad ${target.name}.`, "info");
+						const target = await targetFor(ctx, rest || undefined);
+						if (ctx.hasUI && !(await ctx.ui.confirm("Clear rough pad?", `Reset ${target.name} to the default template?`))) return;
+						await writePad(target, padTemplate(target.repo, target.name));
+						await afterMutation(ctx, target.repo);
+						ctx.ui.notify(`Cleared ${target.name}.`, "info");
 						return;
 					}
 					case "delete": {
-						const target = await resolveTarget(ctx, rest || undefined, false);
-						if (ctx.hasUI && !(await ctx.ui.confirm("Delete rough pad?", `Delete ${target.name}?\n${target.path}`))) {
-							ctx.ui.notify("Delete cancelled", "info");
-							return;
-						}
-						await deletePad(target);
-						ctx.ui.notify(`Deleted rough pad ${target.name}.`, "info");
+						const target = await targetFor(ctx, rest || undefined, false);
+						if (ctx.hasUI && !(await ctx.ui.confirm("Delete rough pad?", `Delete ${target.name}?\n${target.path}`))) return;
+						const existed = await pathExists(target.path);
+						await rm(target.path, { force: true });
+						await afterMutation(ctx, target.repo);
+						ctx.ui.notify(existed ? `Deleted ${target.name}.` : `${target.name} did not exist.`, "info");
 						return;
 					}
 					default:
@@ -547,89 +554,97 @@ export default function roughPadExtension(pi: ExtensionAPI) {
 	pi.registerTool({
 		name: "rough_pad",
 		label: "Rough Pad",
-		description: "Read or edit the user's repo-scoped rough Markdown pad. Use this when the user mentions their rough pad, scratchpad, feature notes, or asks you to remember/update working notes outside git.",
-		promptSnippet: "Read or edit the user's repo-scoped rough Markdown pad for working notes that should not be committed.",
+		description: "Discover, select, read, or edit repo-scoped rough Markdown pads. Pad selection is private to the current Pi session, so parallel agents can use different pads safely.",
+		promptSnippet: "Discover, select, read, or edit this Pi session's repo-scoped rough Markdown pad.",
 		promptGuidelines: [
-			"When the user asks to use, read, save, remember, or update the rough pad/scratchpad/feature notes, use rough_pad instead of creating repo files.",
-			"Use rough_pad action=read before relying on the rough pad, and action=append or note for incremental decisions, plans, and open questions.",
-			"Use action=replace only with exact oldText that occurs once. Use action=write or clear only when the user clearly wants to replace/reset the pad.",
+			"When the user mentions a rough pad without naming one, use this Pi session's selected pad.",
+			"Use action=list when the intended pad is unclear. Use action=use with a name to select a pad for this session.",
+			"Use action=read before relying on a pad. Reading a named pad also selects it and marks it loaded/current for this session.",
+			"Use append or note for incremental decisions. Use replace only with unique exact oldText; use write/clear only on explicit request.",
 		],
 		parameters: RoughPadParams,
 		executionMode: "sequential",
 		async execute(_toolCallId, params, _signal, onUpdate, ctx) {
 			const action = params.action as PadAction;
 			const repo = await getRepoInfo(ctx.cwd);
-			await ensureRepoState(repo);
+			const state = await ensureState(ctx, repo);
 
 			if (action === "list") {
 				const pads = await listPads(repo);
+				const loadState = await loadedState(state, repo);
 				return {
-					content: [{ type: "text", text: pads.length ? pads.map((name) => `- ${name}`).join("\n") : "No rough pads yet for this repo." }],
-					details: { action, repo: repoDetails(repo), pads } satisfies RoughPadDetails,
+					content: [{ type: "text", text: await listText(ctx, repo) }],
+					details: { action, repo: repoDetails(repo), pads, selectedPad: state.selectedPad, loadedPad: state.loaded?.name, loadedState: loadState } satisfies RoughPadDetails,
 				};
 			}
 
 			if (action === "use") {
 				if (!params.name?.trim()) {
-					return { content: [{ type: "text", text: "name is required for action=use" }], details: { action, repo: repoDetails(repo), error: "name required" } satisfies RoughPadDetails };
+					return { content: [{ type: "text", text: "name is required for action=use" }], details: { action, repo: repoDetails(repo), error: "name required", selectedPad: state.selectedPad } satisfies RoughPadDetails };
 				}
-				const name = await setActivePad(repo, params.name);
-				const target = await resolveTarget(ctx, name);
+				const target = await selectPad(ctx, repo, params.name);
 				return {
-					content: [{ type: "text", text: toolTextFor(action, target, `Active pad is now ${name}. Path: ${target.path}`) }],
-					details: { action, repo: repoDetails(repo), name, path: target.path, activePad: name, changed: true } satisfies RoughPadDetails,
+					content: [{ type: "text", text: `Selected rough pad ${target.name} for this Pi session. Path: ${target.path}` }],
+					details: { action, repo: repoDetails(repo), name: target.name, path: target.path, selectedPad: target.name, loadedPad: sessionState?.loaded?.name, changed: true } satisfies RoughPadDetails,
 				};
 			}
 
-			const target = await resolveTarget(ctx, params.name, action !== "delete");
-			onUpdate?.({ content: [{ type: "text", text: `rough_pad ${action} ${target.name}` }], details: { action, repo: repoDetails(repo), name: target.name, path: target.path } satisfies RoughPadDetails });
+			let target = await targetFor(ctx, params.name, action !== "delete");
+			if (action === "read" && params.name) target = await selectPad(ctx, repo, params.name);
+			onUpdate?.({ content: [{ type: "text", text: `rough_pad ${action} ${target.name}` }], details: { action, repo: repoDetails(repo), name: target.name, path: target.path, selectedPad: sessionState?.selectedPad } satisfies RoughPadDetails });
+
+			const details = (extra: Partial<RoughPadDetails> = {}) => ({
+				action,
+				repo: repoDetails(repo),
+				name: target.name,
+				path: target.path,
+				selectedPad: sessionState?.selectedPad,
+				loadedPad: sessionState?.loaded?.name,
+				...extra,
+			}) satisfies RoughPadDetails;
 
 			switch (action) {
 				case "path":
-					return {
-						content: [{ type: "text", text: target.path }],
-						details: { action, repo: repoDetails(repo), name: target.name, path: target.path } satisfies RoughPadDetails,
-					};
+					return { content: [{ type: "text", text: target.path }], details: details() };
 				case "read": {
 					const content = await readPad(target);
-					return {
-						content: [{ type: "text", text: truncate(content) }],
-						details: { action, repo: repoDetails(repo), name: target.name, path: target.path } satisfies RoughPadDetails,
-					};
+					await markLoaded(ctx, target, content);
+					return { content: [{ type: "text", text: truncate(content) }], details: details({ selectedPad: target.name, loadedPad: target.name, loadedState: "current" }) };
 				}
-				case "append": {
-					if (!params.text?.trim()) return { content: [{ type: "text", text: "text is required for action=append" }], details: { action, repo: repoDetails(repo), name: target.name, path: target.path, error: "text required" } satisfies RoughPadDetails };
-					await appendToPad(target, params.text);
-					return { content: [{ type: "text", text: toolTextFor(action, target, "Appended text.") }], details: { action, repo: repoDetails(repo), name: target.name, path: target.path, changed: true } satisfies RoughPadDetails };
-				}
-				case "note": {
-					if (!params.text?.trim()) return { content: [{ type: "text", text: "text is required for action=note" }], details: { action, repo: repoDetails(repo), name: target.name, path: target.path, error: "text required" } satisfies RoughPadDetails };
-					await appendToPad(target, timestampedNote(params.text));
-					return { content: [{ type: "text", text: toolTextFor(action, target, "Added timestamped note.") }], details: { action, repo: repoDetails(repo), name: target.name, path: target.path, changed: true } satisfies RoughPadDetails };
-				}
+				case "append":
+				case "note":
 				case "write": {
-					if (params.text === undefined) return { content: [{ type: "text", text: "text is required for action=write" }], details: { action, repo: repoDetails(repo), name: target.name, path: target.path, error: "text required" } satisfies RoughPadDetails };
-					await writePad(target, params.text);
-					return { content: [{ type: "text", text: toolTextFor(action, target, "Rewrote pad.") }], details: { action, repo: repoDetails(repo), name: target.name, path: target.path, changed: true } satisfies RoughPadDetails };
+					if (params.text === undefined || (action !== "write" && !params.text.trim())) {
+						return { content: [{ type: "text", text: `text is required for action=${action}` }], details: details({ error: "text required" }) };
+					}
+					if (action === "append") await appendToPad(target, params.text);
+					else if (action === "note") await appendToPad(target, timestampedNote(params.text));
+					else await writePad(target, params.text);
+					await afterMutation(ctx, repo);
+					return { content: [{ type: "text", text: `[rough-pad:${target.name}] Updated.` }], details: details({ changed: true, loadedState: await loadedState(sessionState, repo) }) };
 				}
 				case "replace": {
-					if (!params.oldText) return { content: [{ type: "text", text: "oldText is required for action=replace" }], details: { action, repo: repoDetails(repo), name: target.name, path: target.path, error: "oldText required" } satisfies RoughPadDetails };
-					if (params.text === undefined) return { content: [{ type: "text", text: "text is required for action=replace" }], details: { action, repo: repoDetails(repo), name: target.name, path: target.path, error: "text required" } satisfies RoughPadDetails };
+					if (!params.oldText) return { content: [{ type: "text", text: "oldText is required for action=replace" }], details: details({ error: "oldText required" }) };
+					if (params.text === undefined) return { content: [{ type: "text", text: "text is required for action=replace" }], details: details({ error: "text required" }) };
 					const result = await replaceInPad(target, params.oldText, params.text);
+					await afterMutation(ctx, repo);
 					return {
-						content: [{ type: "text", text: result.changed ? toolTextFor(action, target, "Replaced exact text.") : toolTextFor(action, target, `No replacement made: ${result.error}`) }],
-						details: { action, repo: repoDetails(repo), name: target.name, path: target.path, changed: result.changed, error: result.error } satisfies RoughPadDetails,
+						content: [{ type: "text", text: result.changed ? `[rough-pad:${target.name}] Replaced exact text.` : `No replacement made: ${result.error}` }],
+						details: details({ changed: result.changed, error: result.error, loadedState: await loadedState(sessionState, repo) }),
 					};
 				}
 				case "clear":
-					await clearPad(target);
-					return { content: [{ type: "text", text: toolTextFor(action, target, "Reset to default template.") }], details: { action, repo: repoDetails(repo), name: target.name, path: target.path, changed: true } satisfies RoughPadDetails };
+					await writePad(target, padTemplate(repo, target.name));
+					await afterMutation(ctx, repo);
+					return { content: [{ type: "text", text: `[rough-pad:${target.name}] Reset to template.` }], details: details({ changed: true, loadedState: await loadedState(sessionState, repo) }) };
 				case "delete": {
-					const deleted = await deletePad(target);
-					return { content: [{ type: "text", text: toolTextFor(action, target, deleted ? "Deleted pad file." : "Pad file did not exist.") }], details: { action, repo: repoDetails(repo), name: target.name, path: target.path, deleted } satisfies RoughPadDetails };
+					const existed = await pathExists(target.path);
+					await rm(target.path, { force: true });
+					await afterMutation(ctx, repo);
+					return { content: [{ type: "text", text: existed ? `[rough-pad:${target.name}] Deleted.` : `[rough-pad:${target.name}] Did not exist.` }], details: details({ deleted: existed, loadedState: await loadedState(sessionState, repo) }) };
 				}
 				default:
-					return { content: [{ type: "text", text: `Unknown action: ${action}` }], details: { action, repo: repoDetails(repo), error: `Unknown action: ${action}` } satisfies RoughPadDetails };
+					return { content: [{ type: "text", text: `Unknown action: ${action}` }], details: details({ error: `Unknown action: ${action}` }) };
 			}
 		},
 	});

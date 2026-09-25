@@ -1,6 +1,6 @@
 {
   "name": "pi-rough-pad",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Pi extension for repo-scoped rough Markdown pads that agents and humans can share without committing notes.",
   "type": "module",
   "license": "MIT",
