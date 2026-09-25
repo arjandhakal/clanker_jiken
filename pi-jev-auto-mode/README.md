@@ -71,8 +71,10 @@ feature branch the user asked for is.
 When Jev would block or cannot decide, the prompt offers:
 
 - **Allow once** — run this call only this time.
-- **Allow always (this exact command)** — for bash commands, add the exact command to
-  `allowedCommands` and run it.
+- **Globally: Allow always (this exact command)** — for bash commands, add the exact
+  command to global `allowedCommands` and run it.
+- **Locally: Allow always (this exact command)** — for bash commands, add the exact
+  command to this project's `.pi/jev-auto-mode.json` and run it.
 - **Block** — keep the call blocked.
 
 Cancelled requests still block without prompting.

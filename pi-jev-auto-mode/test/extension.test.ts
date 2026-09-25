@@ -298,20 +298,36 @@ describe("semantic verdicts", () => {
     assert.equal(records[0]?.source, "user");
   });
 
-  it("can persist an exact command when the user chooses allow always", async () => {
+  it("can persist an exact command globally when the user chooses globally allow always", async () => {
     const state = stateWith();
-    const ui = createUi({ answer: "Allow always (this exact command)" });
+    const ui = createUi({ answer: "Globally: Allow always (this exact command)" });
     const { deps, records } = createDeps({ verdict: { verdict: "deny", rationale: "rewrites published history" } });
-    let saved = false;
-    const withSave: DecisionDeps = { ...deps, saveSettings: async () => { saved = true; } };
+    let savedScope: string | undefined;
+    const withSave: DecisionDeps = { ...deps, saveSettings: async (_ctx, _state, scope) => { savedScope = scope; } };
 
     const result = await evaluateToolCall(bash("git reset --hard HEAD~1"), createContext({ ui: ui.ui }), state, withSave);
 
     assert.equal(result, undefined);
-    assert.equal(saved, true);
+    assert.equal(savedScope, "global");
     assert.deepEqual(state.settings.allowedCommands, ["git reset --hard HEAD~1"]);
     assert.equal(records[0]?.status, "confirmed");
-    assert.match(records[0]?.rationale ?? "", /allowed this command always/);
+    assert.match(records[0]?.rationale ?? "", /allowed this command always \(global\)/);
+  });
+
+  it("can persist an exact command locally when the user chooses locally allow always", async () => {
+    const state = stateWith();
+    const ui = createUi({ answer: "Locally: Allow always (this exact command)" });
+    const { deps, records } = createDeps({ verdict: { verdict: "deny", rationale: "rewrites published history" } });
+    let savedScope: string | undefined;
+    const withSave: DecisionDeps = { ...deps, saveSettings: async (_ctx, _state, scope) => { savedScope = scope; } };
+
+    const result = await evaluateToolCall(bash("git reset --hard HEAD~1"), createContext({ ui: ui.ui }), state, withSave);
+
+    assert.equal(result, undefined);
+    assert.equal(savedScope, "project");
+    assert.deepEqual(state.settings.allowedCommands, ["git reset --hard HEAD~1"]);
+    assert.equal(records[0]?.status, "confirmed");
+    assert.match(records[0]?.rationale ?? "", /allowed this command always \(project\)/);
   });
 
   it("asks when no decision is available and honours allow once", async () => {

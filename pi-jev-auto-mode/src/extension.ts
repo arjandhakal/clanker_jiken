@@ -113,7 +113,7 @@ export interface DecisionDeps {
   readonly engine: DecisionEngine;
   readonly record: DecisionRecorder;
   readonly now: () => number;
-  readonly saveSettings?: (ctx: GateContext, state: GateState) => Promise<void>;
+  readonly saveSettings?: (ctx: GateContext, state: GateState, scope: SettingsScope) => Promise<void>;
 }
 
 export interface GateState {
@@ -200,7 +200,9 @@ function blockReason(rationale: string): string {
 }
 
 const ALLOW_ONCE_CHOICE = "Allow once";
-const ALLOW_ALWAYS_CHOICE = "Allow always (this exact command)";
+const ALLOW_ALWAYS_GLOBAL_CHOICE = "Globally: Allow always (this exact command)";
+const ALLOW_ALWAYS_LOCAL_CHOICE = "Locally: Allow always (this exact command)";
+const LEGACY_ALLOW_ALWAYS_CHOICE = "Allow always (this exact command)";
 const BLOCK_CHOICE = "Block";
 
 type UserDecisionInput = RecordInput & {
@@ -210,7 +212,7 @@ type UserDecisionInput = RecordInput & {
 function userDecisionOptions(call: GatedCall): string[] {
   return call.command === undefined
     ? [ALLOW_ONCE_CHOICE, BLOCK_CHOICE]
-    : [ALLOW_ONCE_CHOICE, ALLOW_ALWAYS_CHOICE, BLOCK_CHOICE];
+    : [ALLOW_ONCE_CHOICE, ALLOW_ALWAYS_GLOBAL_CHOICE, ALLOW_ALWAYS_LOCAL_CHOICE, BLOCK_CHOICE];
 }
 
 async function askUserToResolveBlock(
@@ -258,19 +260,25 @@ async function askUserToResolveBlock(
     });
   }
 
-  if (choice === ALLOW_ALWAYS_CHOICE && call.command !== undefined) {
+  if (
+    (choice === ALLOW_ALWAYS_GLOBAL_CHOICE ||
+      choice === ALLOW_ALWAYS_LOCAL_CHOICE ||
+      choice === LEGACY_ALLOW_ALWAYS_CHOICE) &&
+    call.command !== undefined
+  ) {
     const command = call.command.trim();
+    const scope: SettingsScope = choice === ALLOW_ALWAYS_LOCAL_CHOICE ? "project" : "global";
     state.settings = {
       ...state.settings,
       allowedCommands: unique([...state.settings.allowedCommands, command]),
     };
-    await deps.saveSettings?.(ctx, state);
+    await deps.saveSettings?.(ctx, state, scope);
     return permit(deps, {
       call,
       reasons,
       status: "confirmed",
       source: "user",
-      rationale: `The user allowed this command always; added it to allowedCommands: ${command}. Original decision: ${rationale}`,
+      rationale: `The user allowed this command always (${scope}); added it to allowedCommands: ${command}. Original decision: ${rationale}`,
       evidence,
     });
   }
@@ -594,8 +602,8 @@ export function register(pi: ExtensionAPI, options: RegisterOptions = {}): void 
     engine: createEngine(state.settings, engineOptions),
     record: options.record ?? createRecorder(pi),
     now,
-    saveSettings: async (ctx, currentState) => {
-      await store.saveSettings(currentState.settings, "global", ctx.cwd);
+    saveSettings: async (ctx, currentState, scope) => {
+      await store.saveSettings(currentState.settings, scope, ctx.cwd);
     },
   };
   let availability: JevAvailability = describeJevAvailability(options.env ?? process.env);
