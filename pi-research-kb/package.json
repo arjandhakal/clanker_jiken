@@ -1,0 +1,17 @@
+{
+  "name": "pi-research-kb",
+  "version": "0.1.0",
+  "description": "A repo-scoped local research knowledge base for Pi with Markdown, Org, and self-contained HTML notes.",
+  "type": "module",
+  "license": "MIT",
+  "keywords": ["pi-package", "pi", "extension", "research", "knowledge-base", "notes", "org", "html"],
+  "pi": {
+    "extensions": ["./extensions/index.ts"],
+    "skills": ["./skills/research-kb"]
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-ai": "*",
+    "typebox": "*"
+  }
+}
