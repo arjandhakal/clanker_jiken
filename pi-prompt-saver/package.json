@@ -1,0 +1,14 @@
+{
+  "name": "pi-prompt-saver",
+  "version": "0.1.0",
+  "description": "Pi extension for saving and reusing the last user prompt by name.",
+  "type": "module",
+  "license": "MIT",
+  "keywords": ["pi-package", "pi", "extension", "prompt", "prompts"],
+  "pi": {
+    "extensions": ["./extensions/index.ts"]
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*"
+  }
+}
