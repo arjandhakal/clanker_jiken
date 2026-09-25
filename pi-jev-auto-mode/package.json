@@ -1,0 +1,72 @@
+{
+  "name": "pi-jev-auto-mode",
+  "version": "0.5.0",
+  "description": "Local fork of Jev-backed auto mode for Pi: judges bash, write, and edit tool calls, then lets the user allow once, allow always, or block when a call would be blocked.",
+  "keywords": [
+    "pi-package",
+    "pi-extension",
+    "pi-coding-agent",
+    "auto-mode",
+    "permission",
+    "gate",
+    "guardrail",
+    "jev",
+    "typesafe",
+    "semantic-validation"
+  ],
+  "license": "MIT",
+  "author": "jomatsu",
+  "homepage": "https://github.com/jomatsu/pi-jev-auto-mode",
+  "bugs": {
+    "url": "https://github.com/jomatsu/pi-jev-auto-mode/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jomatsu/pi-jev-auto-mode.git"
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "files": [
+    "index.ts",
+    "src",
+    "docs",
+    "README.md",
+    "CHANGELOG.md",
+    "SECURITY.md",
+    "LICENSE"
+  ],
+  "pi": {
+    "extensions": [
+      "./index.ts"
+    ]
+  },
+  "scripts": {
+    "test": "node --test --experimental-strip-types --test-reporter=spec 'test/**/*.test.ts'",
+    "typecheck": "tsc --noEmit",
+    "check": "npm run typecheck && npm test",
+    "prepublishOnly": "npm run check"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-tui": "*"
+  },
+  "peerDependenciesMeta": {
+    "@earendil-works/pi-coding-agent": {
+      "optional": true
+    },
+    "@earendil-works/pi-tui": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@earendil-works/pi-coding-agent": "^0.84.2",
+    "@earendil-works/pi-tui": "^0.84.2",
+    "@types/node": "^22.15.0",
+    "typescript": "^5.8.0"
+  },
+  "dependencies": {
+    "@typesafe-ai/sdk": "^0.6.0"
+  }
+}

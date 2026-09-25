@@ -11,6 +11,7 @@ A collection of experimental browser extensions, Pi extensions, and coding-agent
 - [`pi-observational-memory`](./pi-observational-memory) — tiered, subprocess-backed observational memory for long-running Pi sessions.
 - [`pi-prompt-saver`](./pi-prompt-saver) — save the last user prompt by name and load saved prompts back into the editor.
 - [`pi-review-room`](./pi-review-room) — a Herdr-native interactive review subagent with child-pane curation, per-finding handling notes, and explicit handoff to the parent agent.
+- [`pi-jev-auto-mode`](./pi-jev-auto-mode) — local fork of Jev-backed auto mode with allow-once / allow-always / block prompts.
 
 ## Safety extensions
 
