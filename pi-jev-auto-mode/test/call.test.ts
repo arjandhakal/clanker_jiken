@@ -80,7 +80,14 @@ describe("toJevState", () => {
   const call = buildGatedCall({ toolName: "bash", input: { command: "git push --force" } }, { cwd: CWD }) as GatedCall;
 
   it("keeps the call and intent in value, and the policy in context", () => {
-    const state = toJevState({ call, reasons: ["git force push"], intent: "rebase my branch", policy: "never push", repo: REPO });
+    const state = toJevState({
+      call,
+      reasons: ["git force push"],
+      intent: "rebase my branch",
+      policy: "never push",
+      recentUserApprovedCommands: ["git push --force origin feature/previous"],
+      repo: REPO,
+    });
     const value = state.value as Record<string, unknown>;
     const context = state.context as Record<string, unknown>;
 
@@ -89,11 +96,19 @@ describe("toJevState", () => {
     assert.deepEqual(value.matched_policy_reasons, ["git force push"]);
     assert.equal(value.user_intent, "rebase my branch");
     assert.equal(context.policy, "never push");
+    assert.deepEqual(context.recent_user_approved_commands, ["git push --force origin feature/previous"]);
     assert.deepEqual((context.repository as Record<string, unknown>).cwd, CWD);
   });
 
   it("substitutes placeholders so a condition never reads an empty string", () => {
-    const state = toJevState({ call, reasons: [], intent: "   ", policy: "", repo: REPO });
+    const state = toJevState({
+      call,
+      reasons: [],
+      intent: "   ",
+      policy: "",
+      recentUserApprovedCommands: [],
+      repo: REPO,
+    });
     const value = state.value as Record<string, unknown>;
     const context = state.context as Record<string, unknown>;
 
@@ -102,7 +117,14 @@ describe("toJevState", () => {
   });
 
   it("stays JSON-serializable", () => {
-    const state = toJevState({ call, reasons: ["x"], intent: "y", policy: "z", repo: REPO });
+    const state = toJevState({
+      call,
+      reasons: ["x"],
+      intent: "y",
+      policy: "z",
+      recentUserApprovedCommands: [],
+      repo: REPO,
+    });
     assert.deepEqual(JSON.parse(JSON.stringify(state)), state);
   });
 });

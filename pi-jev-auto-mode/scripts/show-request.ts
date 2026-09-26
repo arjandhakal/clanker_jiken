@@ -45,6 +45,7 @@ const input: CandidateInput = {
   flagged: true,
   intent: extractRecentIntent(branch),
   policy: "",
+  recentUserApprovedCommands: ["git reset --hard HEAD~2"],
   repo: REPO,
 };
 
@@ -61,6 +62,7 @@ const rows: Array<[string, number]> = [
   ["value.user_intent (user turns only)", String(value.user_intent ?? "").length],
   ["value.operation + reasons", size({ operation: value.operation, reasons: value.matched_policy_reasons })],
   ["context.policy (your notes)", String(context.policy ?? "").length],
+  ["context.recent_user_approved_commands", size(context.recent_user_approved_commands)],
   ["context.repository", size(context.repository)],
   ["questions (8 noul + criteria)", size(questions)],
 ];

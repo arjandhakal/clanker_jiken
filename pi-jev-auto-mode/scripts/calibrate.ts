@@ -33,6 +33,7 @@ function toCandidate(fixture: Fixture): CandidateInput | undefined {
     flagged: fixture.reasons.some((reason) => reason !== "not on the known-safe list"),
     intent: fixture.intent,
     policy: fixture.policy ?? "",
+    recentUserApprovedCommands: [],
     repo: { cwd: CWD, isGitRepository: true, protectedPaths: [".git", ".ssh", ".pi"] },
   };
 }

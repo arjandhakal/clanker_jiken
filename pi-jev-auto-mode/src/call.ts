@@ -136,6 +136,8 @@ export interface JevStateInput {
   readonly intent: string;
   /** User-authored policy notes. */
   readonly policy: string;
+  /** Bash commands explicitly approved earlier on the active session branch. */
+  readonly recentUserApprovedCommands: readonly string[];
   readonly repo: RepoFacts;
 }
 
@@ -169,6 +171,7 @@ export function toJevState(input: JevStateInput): JevState {
 
   const context: Record<string, JevJson> = {
     policy: input.policy.trim() || NO_POLICY_PLACEHOLDER,
+    recent_user_approved_commands: [...input.recentUserApprovedCommands],
     repository: {
       cwd: input.repo.cwd,
       is_git_repository: input.repo.isGitRepository,

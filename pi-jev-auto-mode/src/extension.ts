@@ -48,6 +48,7 @@ import {
 } from "./policy.ts";
 import {
   createRecorder,
+  DECISION_ENTRY_TYPE,
   registerDecisionEntryRenderer,
   type DecisionRecord,
   type DecisionRecorder,
@@ -120,6 +121,46 @@ export interface GateState {
   settings: JevAutoModeSettings;
   policyNotes: string;
   scope: SettingsScope;
+  /** User-confirmed bash commands on the active session branch, oldest first. */
+  recentUserApprovedCommands: string[];
+}
+
+/** Keep approval context useful and bounded inside Jev's shared request budget. */
+export const MAX_RECENT_USER_APPROVED_COMMANDS = 12;
+
+/**
+ * Remember one approval as the newest unique command.
+ *
+ * A Set prevents repeated confirmations from growing the state with duplicates;
+ * deleting before adding also moves a repeated command to the newest position.
+ */
+export function rememberUserApprovedCommand(
+  commands: readonly string[],
+  command: string,
+): string[] {
+  const normalized = command.trim();
+  const remembered = new Set(commands.map((entry) => entry.trim()).filter(Boolean));
+  if (normalized.length > 0) {
+    remembered.delete(normalized);
+    remembered.add(normalized);
+  }
+  return [...remembered].slice(-MAX_RECENT_USER_APPROVED_COMMANDS);
+}
+
+/** Restore approval context from decision records on the active Pi session branch. */
+export function recentUserApprovedCommandsFromBranch(branch: readonly unknown[]): string[] {
+  let commands: string[] = [];
+  for (const value of branch) {
+    if (!value || typeof value !== "object") continue;
+    const entry = value as { type?: unknown; customType?: unknown; data?: unknown };
+    if (entry.type !== "custom" || entry.customType !== DECISION_ENTRY_TYPE) continue;
+    if (!entry.data || typeof entry.data !== "object") continue;
+    const record = entry.data as Partial<DecisionRecord>;
+    if (record.status !== "confirmed" || record.source !== "user") continue;
+    if (typeof record.userApprovedCommand !== "string") continue;
+    commands = rememberUserApprovedCommand(commands, record.userApprovedCommand);
+  }
+  return commands;
 }
 
 export interface BlockResult {
@@ -128,7 +169,12 @@ export interface BlockResult {
 }
 
 export function createInitialState(): GateState {
-  return { settings: DEFAULT_SETTINGS, policyNotes: "", scope: "global" };
+  return {
+    settings: DEFAULT_SETTINGS,
+    policyNotes: "",
+    scope: "global",
+    recentUserApprovedCommands: [],
+  };
 }
 
 function conversationBranch(ctx: GateContext): readonly unknown[] {
@@ -163,6 +209,7 @@ interface RecordInput {
   readonly source: DecisionRecord["source"];
   readonly rationale: string;
   readonly evidence?: EngineEvidence;
+  readonly userApprovedCommand?: string;
 }
 
 function writeRecord(deps: DecisionDeps, input: RecordInput): void {
@@ -173,6 +220,7 @@ function writeRecord(deps: DecisionDeps, input: RecordInput): void {
     status: input.status,
     source: input.source,
     rationale: input.rationale,
+    ...(input.userApprovedCommand === undefined ? {} : { userApprovedCommand: input.userApprovedCommand }),
     ...(input.evidence?.conditions ? { conditions: input.evidence.conditions } : {}),
     ...(input.evidence?.decidingRule ? { decidingRule: input.evidence.decidingRule } : {}),
     ...(input.evidence?.clearedByIntent ? { clearedByIntent: input.evidence.clearedByIntent } : {}),
@@ -250,6 +298,12 @@ async function askUserToResolveBlock(
 
   // Backwards compatibility with older tests/configured UI shims that returned Yes/No.
   if (choice === ALLOW_ONCE_CHOICE || choice === "Yes") {
+    if (call.command !== undefined) {
+      state.recentUserApprovedCommands = rememberUserApprovedCommand(
+        state.recentUserApprovedCommands,
+        call.command,
+      );
+    }
     return permit(deps, {
       call,
       reasons,
@@ -257,6 +311,7 @@ async function askUserToResolveBlock(
       source: "user",
       rationale: `The user allowed this call once. Original decision: ${rationale}`,
       evidence,
+      ...(call.command === undefined ? {} : { userApprovedCommand: call.command }),
     });
   }
 
@@ -272,6 +327,10 @@ async function askUserToResolveBlock(
       ...state.settings,
       allowedCommands: unique([...state.settings.allowedCommands, command]),
     };
+    state.recentUserApprovedCommands = rememberUserApprovedCommand(
+      state.recentUserApprovedCommands,
+      command,
+    );
     await deps.saveSettings?.(ctx, state, scope);
     return permit(deps, {
       call,
@@ -280,6 +339,7 @@ async function askUserToResolveBlock(
       source: "user",
       rationale: `The user allowed this command always (${scope}); added it to allowedCommands: ${command}. Original decision: ${rationale}`,
       evidence,
+      userApprovedCommand: command,
     });
   }
 
@@ -391,6 +451,7 @@ export async function evaluateToolCall(
     flagged: reasons.some((reason) => reason !== NOT_KNOWN_SAFE_REASON),
     intent: extractRecentIntent(conversationBranch(ctx)),
     policy: state.policyNotes,
+    recentUserApprovedCommands: state.recentUserApprovedCommands,
     repo: repoFacts(ctx.cwd, call),
   };
 
@@ -622,6 +683,7 @@ export function register(pi: ExtensionAPI, options: RegisterOptions = {}): void 
     state.settings = loadedSettings.settings;
     state.scope = loadedSettings.scope;
     state.policyNotes = await store.loadPolicyNotes();
+    state.recentUserApprovedCommands = recentUserApprovedCommandsFromBranch(conversationBranch(ctx));
     if (applyFlag && pi.getFlag(AUTO_MODE_FLAG) === true) {
       state.settings = { ...state.settings, enabled: true };
     }
@@ -925,6 +987,12 @@ export function register(pi: ExtensionAPI, options: RegisterOptions = {}): void 
 
   pi.on("session_start", async (_event, ctx) => {
     await refresh(toGateContext(ctx), true);
+  });
+
+  pi.on("session_tree", async (_event, ctx) => {
+    state.recentUserApprovedCommands = recentUserApprovedCommandsFromBranch(
+      conversationBranch(toGateContext(ctx)),
+    );
   });
 
   pi.on("tool_call", async (event, ctx) => {

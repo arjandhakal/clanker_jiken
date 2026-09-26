@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Remember the latest 12 deduplicated bash commands explicitly approved by the user on the active
+  session branch and send them to Jev as advisory context. Analogous follow-up work, such as the
+  same test command with a different filename, can now be recognized without creating a wildcard
+  deterministic allow rule. Approval history follows session branches and survives resume.
+
 ## 0.5.0 - 2026-09-24
 
 - **Decision records are compact by default.** An approval is drawn as one line — status, tool,

@@ -51,7 +51,15 @@ function bashCall(command: string): GatedCall {
 }
 
 function candidate(call: GatedCall, policy = ""): CandidateInput {
-  return { call, reasons: ["git reset hard"], flagged: true, intent: "rebase my working branch", policy, repo: REPO };
+  return {
+    call,
+    reasons: ["git reset hard"],
+    flagged: true,
+    intent: "rebase my working branch",
+    policy,
+    recentUserApprovedCommands: [],
+    repo: REPO,
+  };
 }
 describe("condition classification", () => {
   it("uses two symmetric thresholds and keeps the middle band", () => {
@@ -163,6 +171,13 @@ describe("question set", () => {
     const plain = rulesForTool("bash", DEFAULT_RULES, { hasPolicy: false, flagged: false }).map((rule) => rule.id);
     assert.ok(flagged.includes("intent_coverage"));
     assert.equal(plain.includes("intent_coverage"), false, "ordinary work is not asked whether it was requested");
+  });
+
+  it("lets intent coverage use a closely analogous prior user approval", () => {
+    const question = ruleById("intent_coverage")?.question ?? "";
+    assert.match(question, /context\.recent_user_approved_commands/);
+    assert.match(question, /not blanket permission/);
+    assert.match(question, /material change in side effects or target sensitivity does not count/);
   });
 
   it("asks the fetched-code question only for a downloaded-script command", () => {
@@ -306,6 +321,7 @@ describe("engine", () => {
     const state = requests[0]?.state as { value: Record<string, unknown>; context: Record<string, unknown> };
     assert.equal(state.value.command, "git reset --hard HEAD~1");
     assert.equal(state.value.user_intent, "rebase my working branch");
+    assert.deepEqual(state.context.recent_user_approved_commands, []);
     assert.equal((state.context.repository as { cwd: string }).cwd, CWD);
   });
 

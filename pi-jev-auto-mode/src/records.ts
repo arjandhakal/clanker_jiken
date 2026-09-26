@@ -21,6 +21,11 @@ export interface DecisionRecord {
   readonly status: "allowed" | "blocked" | "confirmed" | "cancelled";
   readonly source: DecisionSource;
   readonly rationale: string;
+  /**
+   * Redacted command the user explicitly approved. Used to restore recent
+   * approval context from the active session branch; never enters Pi's LLM context.
+   */
+  readonly userApprovedCommand?: string;
   /** One entry per condition that was asked, in the order they were asked. */
   readonly conditions?: readonly ConditionReport[];
   readonly decidingRule?: string;

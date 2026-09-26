@@ -73,6 +73,10 @@ when it said `deny` or when no decision was available.
 - The user intent sent for judgment is built from **user-authored messages only**. Assistant
   text and tool output are excluded, because they carry repository content and command output
   and would otherwise let a file argue for its own approval.
+- Up to 12 deduplicated bash commands the user explicitly approved on the active session branch
+  are sent as advisory context. They can support an analogous follow-up (such as the same test
+  runner with another filename), but are not deterministic allow rules; a material change in
+  side effects or target sensitivity still has to pass the normal conditions.
 - File contents and diffs are never sent. Only paths.
 - `AGENTS.md` / `CLAUDE.md` and the agent configuration directories are treated as protected
   paths: a write there changes what the agent believes it was told.
@@ -91,8 +95,9 @@ payload is deliberately narrow:
 | tool name, bash command text (truncated) | file contents, diffs, `write` bodies |
 | write/edit target path, cwd | tool output, assistant messages |
 | matched policy reason names | environment variables |
-| recent user messages (bounded, ≤4k chars) | the API key itself |
+| recent user messages (bounded, ≤6k chars) | the API key itself |
 | policy notes | |
+| up to 12 recent, deduplicated user-approved bash commands (redacted and truncated) | commands approved on abandoned session branches |
 
 The API key is stored as a `0600` file under `<agentDir>/secrets/`, the same place Pi keeps its
 own credentials. It is never written to the settings file, and it is never part of the judgment

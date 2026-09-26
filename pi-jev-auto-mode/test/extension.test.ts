@@ -5,6 +5,9 @@ import type { DecisionRecord } from "../src/records.ts";
 import {
   createInitialState,
   evaluateToolCall,
+  MAX_RECENT_USER_APPROVED_COMMANDS,
+  recentUserApprovedCommandsFromBranch,
+  rememberUserApprovedCommand,
   type DecisionDeps,
   type GateContext,
   type GateState,
@@ -73,12 +76,56 @@ function createDeps(options: { verdict?: EngineVerdict; engine?: DecisionEngine 
 }
 
 function stateWith(patch: Partial<GateState["settings"]> = {}, policyNotes = ""): GateState {
-  return { settings: { ...DEFAULT_SETTINGS, ...patch }, policyNotes, scope: "global" };
+  return {
+    settings: { ...DEFAULT_SETTINGS, ...patch },
+    policyNotes,
+    scope: "global",
+    recentUserApprovedCommands: [],
+  };
 }
 
 function bash(command: string): ToolCallEventLike {
   return { toolName: "bash", input: { command } };
 }
+
+describe("recent user approvals", () => {
+  it("deduplicates commands, keeps recency order, and bounds the list", () => {
+    let commands: string[] = [];
+    for (let index = 0; index <= MAX_RECENT_USER_APPROVED_COMMANDS; index += 1) {
+      commands = rememberUserApprovedCommand(commands, `npm run test -- test/${index}.test.ts`);
+    }
+    commands = rememberUserApprovedCommand(commands, "npm run test -- test/1.test.ts");
+
+    assert.equal(commands.length, MAX_RECENT_USER_APPROVED_COMMANDS);
+    assert.equal(commands.at(-1), "npm run test -- test/1.test.ts");
+    assert.equal(commands.filter((command) => command.endsWith("/1.test.ts")).length, 1);
+  });
+
+  it("restores only user-confirmed commands from the active branch", () => {
+    const branch = [
+      {
+        type: "custom",
+        customType: "jev-auto-mode-decision",
+        data: { status: "confirmed", source: "user", userApprovedCommand: "npm run test -- a.ts" },
+      },
+      {
+        type: "custom",
+        customType: "jev-auto-mode-decision",
+        data: { status: "allowed", source: "engine", userApprovedCommand: "npm run test -- ignored.ts" },
+      },
+      {
+        type: "custom",
+        customType: "jev-auto-mode-decision",
+        data: { status: "confirmed", source: "user", userApprovedCommand: "npm run test -- b.ts" },
+      },
+    ];
+
+    assert.deepEqual(recentUserApprovedCommandsFromBranch(branch), [
+      "npm run test -- a.ts",
+      "npm run test -- b.ts",
+    ]);
+  });
+});
 
 describe("disabled and out-of-scope calls", () => {
   it("does nothing while auto mode is off", async () => {
@@ -343,6 +390,44 @@ describe("semantic verdicts", () => {
     assert.equal(ui.selections.length, 1);
   });
 
+  it("sends recent user-approved commands to Jev for analogous follow-up work", async () => {
+    const state = stateWith();
+    const ui = createUi({ answer: "Allow once" });
+    const { deps, inputs, records } = createDeps({ verdict: { verdict: "deny", rationale: "not previously approved" } });
+
+    await evaluateToolCall(
+      bash("npm run test -- test/first.test.ts"),
+      createContext({ ui: ui.ui }),
+      state,
+      deps,
+    );
+    await evaluateToolCall(
+      bash("npm run test -- test/second.test.ts"),
+      createContext({ ui: ui.ui }),
+      state,
+      deps,
+    );
+
+    assert.deepEqual(inputs[0]?.recentUserApprovedCommands, []);
+    assert.equal(records[0]?.userApprovedCommand, "npm run test -- test/first.test.ts");
+    assert.deepEqual(inputs[1]?.recentUserApprovedCommands, ["npm run test -- test/first.test.ts"]);
+    assert.deepEqual(state.recentUserApprovedCommands, [
+      "npm run test -- test/first.test.ts",
+      "npm run test -- test/second.test.ts",
+    ]);
+  });
+
+  it("keeps only one copy when the same command is approved repeatedly", async () => {
+    const state = stateWith();
+    const ui = createUi({ answer: "Allow once" });
+    const { deps } = createDeps({ verdict: { verdict: "deny", rationale: "ask the user" } });
+
+    await evaluateToolCall(bash("npm run test -- test/unit.test.ts"), createContext({ ui: ui.ui }), state, deps);
+    await evaluateToolCall(bash("npm run test -- test/unit.test.ts"), createContext({ ui: ui.ui }), state, deps);
+
+    assert.deepEqual(state.recentUserApprovedCommands, ["npm run test -- test/unit.test.ts"]);
+  });
+
   it("fails closed when the request is cancelled while the engine is deciding", async () => {
     // The real race: Esc arrives mid-judgment. A verdict that arrives after the
     // cancellation must not be treated as an approval.
@@ -540,6 +625,7 @@ describe("state handed to the engine", () => {
     );
     assert.equal(inputs[0]?.intent, "clean up the build directory");
     assert.equal(inputs[0]?.policy, "this machine is disposable");
+    assert.deepEqual(inputs[0]?.recentUserApprovedCommands, []);
     assert.equal(inputs[0]?.repo.cwd, CWD);
   });
 });

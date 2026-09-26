@@ -60,6 +60,12 @@ export interface CandidateInput {
   readonly flagged: boolean;
   readonly intent: string;
   readonly policy: string;
+  /**
+   * Recent bash commands the user explicitly allowed in this session branch.
+   * They are advisory context for analogous follow-up work, never deterministic
+   * allow rules.
+   */
+  readonly recentUserApprovedCommands: readonly string[];
   readonly repo: RepoFacts;
 }
 

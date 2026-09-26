@@ -130,6 +130,7 @@ describe("registration", () => {
     assert.ok(harness.commands.has(AUTO_MODE_COMMAND));
     assert.equal(harness.handlers.get("tool_call")?.length, 1);
     assert.equal(harness.handlers.get("session_start")?.length, 1);
+    assert.equal(harness.handlers.get("session_tree")?.length, 1);
   });
 
   it("loads settings on session start and shows the footer status", async () => {

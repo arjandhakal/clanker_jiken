@@ -77,6 +77,13 @@ When Jev would block or cannot decide, the prompt offers:
   command to this project's `.pi/jev-auto-mode.json` and run it.
 - **Block** — keep the call blocked.
 
+User-approved bash commands are also remembered on the active session branch (the latest 12,
+deduplicated) and sent to Jev as advisory context. This lets Jev recognize analogous follow-up
+work—for example, the same test command with a different filename—without turning an approval
+into a wildcard allow rule. A materially different side effect or sensitive target is still
+judged normally. The remembered list follows session branching and is restored when a session
+is resumed; it is not added to global settings.
+
 Cancelled requests still block without prompting.
 
 ## Install
@@ -234,7 +241,8 @@ An escalated call sends the following to TypeSafe's API (`api.typesafe.ai`):
 - the tool name and the bash command text (truncated),
 - for `write` / `edit`: the target **path** — never the file contents or the diff,
 - the working directory, the matched policy reason names,
-- recent **user** messages (bounded), and your policy notes.
+- recent **user** messages (bounded), your policy notes, and up to 12 deduplicated bash commands
+  you explicitly approved on the active session branch.
 
 Obvious credentials (`*_KEY=…`, `Bearer …`, JWTs, `sk-…`, `ghp_…`, PEM private keys) are
 redacted on the way out. Assistant output, tool output, and file contents are never sent.

@@ -95,7 +95,12 @@ questions, and the model never has to weigh concerns against each other.
 
 `intent_coverage` is the only permission question. It reads user-authored messages only — never
 assistant text, tool output, or file contents — so repository content cannot argue for its own
-approval.
+approval. It also receives the latest 12 deduplicated bash commands that the user explicitly
+approved on the active session branch. A closely analogous command can therefore inherit
+permission evidence (for example, rerunning the same test runner against another filename), but
+this is advisory semantic context rather than a generated wildcard: materially different side
+effects or target sensitivity do not count as analogous. The approval list is persisted in the
+existing decision records and reconstructed from the active branch on resume or tree navigation.
 
 ## Gate scope, and why the default is `all`
 
