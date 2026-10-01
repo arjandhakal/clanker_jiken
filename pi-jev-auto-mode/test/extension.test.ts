@@ -8,6 +8,7 @@ import {
   MAX_RECENT_USER_APPROVED_COMMANDS,
   recentUserApprovedCommandsFromBranch,
   rememberUserApprovedCommand,
+  sessionGrantsFromBranch,
   type DecisionDeps,
   type GateContext,
   type GateState,
@@ -22,17 +23,20 @@ interface UiHarness {
   readonly ui: GateUi;
   readonly notifications: Array<{ message: string; type?: string }>;
   readonly selections: string[];
+  readonly optionSets: string[][];
 }
 
 function createUi(options: { answer?: string; input?: string } = {}): UiHarness {
   const notifications: Array<{ message: string; type?: string }> = [];
   const selections: string[] = [];
+  const optionSets: string[][] = [];
   const ui: GateUi = {
     notify: (message, type) => {
       notifications.push({ message, type });
     },
-    select: async (title) => {
+    select: async (title, choices) => {
       selections.push(title);
+      optionSets.push(choices);
       return options.answer;
     },
     confirm: async () => true,
@@ -40,7 +44,7 @@ function createUi(options: { answer?: string; input?: string } = {}): UiHarness 
     editor: async () => undefined,
     setStatus: () => {},
   };
-  return { ui, notifications, selections };
+  return { ui, notifications, selections, optionSets };
 }
 
 function createContext(
@@ -81,6 +85,7 @@ function stateWith(patch: Partial<GateState["settings"]> = {}, policyNotes = "")
     policyNotes,
     scope: "global",
     recentUserApprovedCommands: [],
+    sessionGrants: [],
   };
 }
 
@@ -124,6 +129,28 @@ describe("recent user approvals", () => {
       "npm run test -- a.ts",
       "npm run test -- b.ts",
     ]);
+  });
+
+  it("restores only user-confirmed session grants from the active branch", () => {
+    const branch = [
+      {
+        type: "custom",
+        customType: "jev-auto-mode-decision",
+        data: { status: "confirmed", source: "user", sessionGrant: { kind: "git-push", lifetime: "session", allowForce: false } },
+      },
+      {
+        type: "custom",
+        customType: "jev-auto-mode-decision",
+        data: { status: "allowed", source: "grant", sessionGrant: { kind: "outside-cwd-write", lifetime: "session", protectedPathsExcluded: true } },
+      },
+      {
+        type: "custom",
+        customType: "jev-auto-mode-decision",
+        data: { status: "confirmed", source: "user", sessionGrant: { kind: "git-push", lifetime: "session", allowForce: false } },
+      },
+    ];
+
+    assert.deepEqual(sessionGrantsFromBranch(branch), [{ kind: "git-push", lifetime: "session", allowForce: false }]);
   });
 });
 
@@ -482,6 +509,114 @@ describe("semantic verdicts", () => {
     assert.equal(result?.block, true);
     assert.equal(records[0]?.source, "unavailable");
     assert.match(records[0]?.rationale ?? "", /cancelled/);
+  });
+});
+
+describe("session grants in the live gate", () => {
+  it("offers and remembers a non-force git-push grant without calling Jev again", async () => {
+    const state = stateWith();
+    const ui = createUi({ answer: "This session: remember non-force git push" });
+    const { deps, records, inputs } = createDeps({ verdict: { verdict: "deny", rationale: "remote side effect" } });
+
+    const first = await evaluateToolCall(bash("git push origin HEAD"), createContext({ ui: ui.ui }), state, deps);
+    const second = await evaluateToolCall(bash("git push"), createContext({ ui: ui.ui }), state, deps);
+
+    assert.equal(first, undefined);
+    assert.equal(second, undefined);
+    assert.ok(ui.optionSets[0]?.includes("This session: remember non-force git push"));
+    assert.deepEqual(state.sessionGrants, [{ kind: "git-push", lifetime: "session", allowForce: false }]);
+    assert.equal(records[0]?.source, "user");
+    assert.deepEqual(records[0]?.sessionGrant, { kind: "git-push", lifetime: "session", allowForce: false });
+    assert.equal(records[1]?.source, "grant");
+    assert.equal(records[1]?.status, "allowed");
+    assert.equal(inputs.length, 1, "the second git push is not sent to Jev");
+    assert.equal(ui.selections.length, 1, "the second git push does not prompt again");
+  });
+
+  it("does not let a git-push grant cover force, mirror, or unrelated chained commands", async () => {
+    const state = stateWith();
+    state.sessionGrants = [{ kind: "git-push", lifetime: "session", allowForce: false }];
+    const ui = createUi({ answer: "Block" });
+    const { deps, records, inputs } = createDeps({ verdict: { verdict: "deny", rationale: "not covered" } });
+
+    await evaluateToolCall(bash("git push --force"), createContext({ ui: ui.ui }), state, deps);
+    await evaluateToolCall(bash("git push --mirror"), createContext({ ui: ui.ui }), state, deps);
+    await evaluateToolCall(bash("git push && npm publish"), createContext({ ui: ui.ui }), state, deps);
+
+    assert.equal(inputs.length, 3);
+    assert.deepEqual(records.map((record) => record.source), ["user", "user", "user"]);
+    assert.deepEqual(records.map((record) => record.status), ["cancelled", "cancelled", "cancelled"]);
+  });
+
+  it("offers and remembers an outside-cwd write/edit grant without bypassing protected paths", async () => {
+    const state = stateWith({ extraProtectedPaths: ["shared-secret.txt"] });
+    const ui = createUi({ answer: "This session: remember outside-cwd write/edit to non-protected paths" });
+    const { deps, records, inputs } = createDeps({ verdict: { verdict: "deny", rationale: "outside cwd" } });
+
+    const first = await evaluateToolCall(
+      { toolName: "write", input: { path: "../shared/config.ts", content: "x" } },
+      createContext({ ui: ui.ui }),
+      state,
+      deps,
+    );
+    const second = await evaluateToolCall(
+      { toolName: "edit", input: { path: "/tmp/generated/report.md", edits: [{ oldText: "a", newText: "b" }] } },
+      createContext({ ui: ui.ui }),
+      state,
+      deps,
+    );
+    await evaluateToolCall(
+      { toolName: "write", input: { path: "../.ssh/id_ed25519", content: "x" } },
+      createContext({ ui: ui.ui }),
+      state,
+      deps,
+    );
+    await evaluateToolCall(
+      { toolName: "write", input: { path: "../shared-secret.txt", content: "x" } },
+      createContext({ ui: ui.ui }),
+      state,
+      deps,
+    );
+
+    assert.equal(first, undefined);
+    assert.equal(second, undefined);
+    assert.ok(ui.optionSets[0]?.includes("This session: remember outside-cwd write/edit to non-protected paths"));
+    assert.deepEqual(state.sessionGrants, [{ kind: "outside-cwd-write", lifetime: "session", protectedPathsExcluded: true }]);
+    assert.equal(records[0]?.source, "user");
+    assert.equal(records[1]?.source, "grant");
+    assert.equal(inputs.length, 3, "only the first and the two protected writes reach Jev");
+    assert.deepEqual(inputs[1]?.reasons, ["protected directory `.ssh`", "write outside the working directory"]);
+    assert.deepEqual(inputs[2]?.reasons, ["configured protected path `shared-secret.txt`", "write outside the working directory"]);
+  });
+
+  it("can remember an exact command for this session", async () => {
+    const state = stateWith();
+    const ui = createUi({ answer: "This session: remember this exact command" });
+    const { deps, records, inputs } = createDeps({ verdict: { verdict: "deny", rationale: "needs confirmation" } });
+
+    await evaluateToolCall(bash("mkdir -p notes"), createContext({ ui: ui.ui }), state, deps);
+    const result = await evaluateToolCall(bash("mkdir   -p   notes"), createContext({ ui: ui.ui }), state, deps);
+
+    assert.equal(result, undefined);
+    assert.deepEqual(state.sessionGrants, [{ kind: "exact-command", command: "mkdir -p notes", lifetime: "session" }]);
+    assert.deepEqual(state.recentUserApprovedCommands, ["mkdir -p notes"]);
+    assert.equal(records[1]?.source, "grant");
+    assert.equal(inputs.length, 1);
+    assert.equal(ui.selections.length, 1);
+  });
+
+  it("does not let an exact-command grant bypass credential path rules", async () => {
+    const state = stateWith();
+    state.sessionGrants = [{ kind: "exact-command", command: "grep -r key ~/.ssh/id_ed25519", lifetime: "session" }];
+    const ui = createUi({ answer: "Block" });
+    const { deps, records, inputs } = createDeps({ verdict: { verdict: "deny", rationale: "credential material" } });
+
+    await evaluateToolCall(bash("grep -r key ~/.ssh/id_ed25519"), createContext({ ui: ui.ui }), state, deps);
+
+    assert.equal(inputs.length, 1);
+    assert.deepEqual(inputs[0]?.reasons, ["reads a credential file"]);
+    assert.equal(records[0]?.source, "user");
+    assert.equal(records[0]?.status, "cancelled");
   });
 });
 

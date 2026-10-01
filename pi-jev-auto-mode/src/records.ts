@@ -9,6 +9,7 @@
 import { Box, Text, truncateToWidth, type Component } from "@earendil-works/pi-tui";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import type { ConditionReport, DecisionSource } from "./decide.ts";
+import { describeGrant, type Grant } from "./grants.ts";
 import { formatThreshold } from "./jev/decide.ts";
 import type { DisplayMode } from "./settings.ts";
 
@@ -26,6 +27,7 @@ export interface DecisionRecord {
    * approval context from the active session branch; never enters Pi's LLM context.
    */
   readonly userApprovedCommand?: string;
+  readonly sessionGrant?: Grant;
   /** One entry per condition that was asked, in the order they were asked. */
   readonly conditions?: readonly ConditionReport[];
   readonly decidingRule?: string;
@@ -58,6 +60,7 @@ const STATUS_LABEL: Record<DecisionRecord["status"], string> = {
 export function formatDecisionLine(record: DecisionRecord): string {
   const parts = [`${record.tool}: ${STATUS_LABEL[record.status]}`, `via ${record.source}`];
   if (record.decidingRule) parts.push(`decided by ${record.decidingRule}`);
+  if (record.sessionGrant) parts.push(describeGrant(record.sessionGrant));
   if (record.model) parts.push(record.model);
   if (typeof record.latencyMs === "number") parts.push(`${Math.round(record.latencyMs)}ms`);
   return parts.join(" · ");
@@ -174,6 +177,9 @@ export function registerDecisionEntryRenderer(
     box.addChild(new Text(record.summary));
     if (record.reasons.length > 0) {
       box.addChild(new Text(theme.fg("dim", `reasons: ${record.reasons.join(", ")}`)));
+    }
+    if (record.sessionGrant) {
+      box.addChild(new Text(theme.fg("dim", `grant: ${describeGrant(record.sessionGrant)}`)));
     }
     box.addChild(new Text(theme.fg("dim", `rationale: ${record.rationale}`)));
 
