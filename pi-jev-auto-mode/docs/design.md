@@ -41,14 +41,15 @@ tool_call(bash | write | edit)
   ├─ 4. read-only command, or user-declared safe command
   │                                           → pass through (silent)
   ├─ 5. in-project write/edit, unprotected    → pass through (silent)
-  └─ 6. Jev: one request, all conditions
+  ├─ 6. session grant match                   → allow (recorded), no Jev
+  └─ 7. Jev: one request, all conditions
          ├ every `required` condition satisfied, no hazard rejected → allow
          ├ any `hazard` condition rejected    → block
          ├ any `soft` condition rejected      → block, unless the user's own request covers it
          ├ any `required` condition unclear   → resolved by the `uncertain` setting
          │                                      (default: block; `ask` prompts, `allow` passes)
          └ unavailable                        → block (fail-closed)
-  └─ 7. record the decision via appendEntry (never enters LLM context)
+  └─ 8. record the decision via appendEntry (never enters LLM context)
 ```
 
 Hard-deny is evaluated first and its verdict is never handed to the semantic layer, so a
@@ -93,7 +94,7 @@ shows a bounded preview — Pi's dialogs do not clip their content, so an unboun
 produces a dialog taller than the terminal. One question, one judgment; no compound
 questions, and the model never has to weigh concerns against each other.
 
-`intent_coverage` is the only permission question. It reads user-authored messages only — never
+`intent_coverage` is the only Jev permission question. It reads user-authored messages only — never
 assistant text, tool output, or file contents — so repository content cannot argue for its own
 approval. It also receives the latest 12 deduplicated bash commands that the user explicitly
 approved on the active session branch. A closely analogous command can therefore inherit
@@ -101,6 +102,14 @@ permission evidence (for example, rerunning the same test runner against another
 this is advisory semantic context rather than a generated wildcard: materially different side
 effects or target sensitivity do not count as analogous. The approval list is persisted in the
 existing decision records and reconstructed from the active branch on resume or tree navigation.
+
+Session grants are the deterministic permission memory. They are typed records created only from
+prompt choices, then restored from local decision records on the active branch. The live grant set
+currently covers exact bash commands, non-force `git push` with benign git companions, and
+outside-cwd write/edit calls that do not touch protected paths. Grant matching happens after
+hard-deny, user deny, user allow, read-only, and in-project write fast paths, but before Jev.
+Protected targets and credential path reads still outrank grant matching. A matched grant writes
+an allowed decision record with the grant that was used.
 
 ## Gate scope, and why the default is `all`
 
@@ -148,7 +157,7 @@ shipped to everyone.
 
 ## Tests
 
-182 tests, none of which need a network or an API key: the engine and transport are stubbed so
+217 tests, none of which need a network or an API key: the engine and transport are stubbed so
 every branch — allow, deny, cleared-by-intent, uncertain, each unavailable reason, boundary
 probabilities — is deterministic. The real API is exercised by two scripts that are not part of
 the published package:

@@ -20,8 +20,9 @@ This package splits those two responsibilities and keeps the envelope authoritat
 | Clear a `soft` hazard rejection when the user's own request covers the call | Clear a `hazard`-severity rejection (secret egress, credential stores, injection) |
 
 The order in `evaluateToolCall` is the enforcement: hard-deny and user rules return before the
-engine is constructed or called at all. There is no code path in which a probabilistic verdict
-is consulted for a hard-deny target.
+engine is constructed or called at all. Session grants are checked only after those rules and
+after protected write targets are classified. There is no code path in which a probabilistic
+verdict or a session grant is consulted for a hard-deny target.
 
 ### The soft/hazard split, and why it is the riskiest part of the design
 
@@ -77,6 +78,10 @@ when it said `deny` or when no decision was available.
   are sent as advisory context. They can support an analogous follow-up (such as the same test
   runner with another filename), but are not deterministic allow rules; a material change in
   side effects or target sensitivity still has to pass the normal conditions.
+- Typed session grants are deterministic allow rules, but only when the user chose a prompt
+  option that named the scope. Current grants cover exact bash commands, non-force `git push`,
+  and outside-cwd write/edit calls to non-protected paths. They are restored from decision
+  records on the active session branch and do not come from repository content or inferred prose.
 - File contents and diffs are never sent. Only paths.
 - `AGENTS.md` / `CLAUDE.md` and the agent configuration directories are treated as protected
   paths: a write there changes what the agent believes it was told.
@@ -97,7 +102,8 @@ payload is deliberately narrow:
 | matched policy reason names | environment variables |
 | recent user messages (bounded, ≤6k chars) | the API key itself |
 | policy notes | |
-| up to 12 recent, deduplicated user-approved bash commands (redacted and truncated) | commands approved on abandoned session branches |
+| up to 12 recent, deduplicated user-approved bash commands (redacted and truncated) | session grant records, because matching happens before Jev |
+| | commands approved on abandoned session branches |
 
 The API key is stored as a `0600` file under `<agentDir>/secrets/`, the same place Pi keeps its
 own credentials. It is never written to the settings file, and it is never part of the judgment
@@ -111,9 +117,9 @@ not a guarantee — an unusual secret format will pass through. Lower
 `maxStateCharacters`, or keep a command out of the gate by adding a deny/allow rule, if a
 repository must not produce outbound text at all.
 
-Records written to the session store the decision, the matched reasons, the rationale, the
-model name, and per-condition probabilities. They are local and do not enter the model's
-context.
+Records written to the session store the decision, the matched reasons, the rationale, any
+session grant created or used, the model name, and per-condition probabilities. They are local
+and do not enter the model's context.
 
 ## Known limits
 

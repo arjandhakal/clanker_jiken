@@ -36,6 +36,14 @@ import {
   type Observation,
   type ObservationMeta,
 } from "./jev/index.ts";
+import {
+  describeGrant,
+  firstMatchingGrant,
+  grantProposalsForCall,
+  parseGrant,
+  rememberGrant,
+  type Grant,
+} from "./grants.ts";
 import { extractRecentIntent } from "./intent.ts";
 import {
   dangerousReasons,
@@ -123,6 +131,7 @@ export interface GateState {
   scope: SettingsScope;
   /** User-confirmed bash commands on the active session branch, oldest first. */
   recentUserApprovedCommands: string[];
+  sessionGrants: Grant[];
 }
 
 /** Keep approval context useful and bounded inside Jev's shared request budget. */
@@ -163,6 +172,21 @@ export function recentUserApprovedCommandsFromBranch(branch: readonly unknown[])
   return commands;
 }
 
+export function sessionGrantsFromBranch(branch: readonly unknown[]): Grant[] {
+  let grants: Grant[] = [];
+  for (const value of branch) {
+    if (!value || typeof value !== "object") continue;
+    const entry = value as { type?: unknown; customType?: unknown; data?: unknown };
+    if (entry.type !== "custom" || entry.customType !== DECISION_ENTRY_TYPE) continue;
+    if (!entry.data || typeof entry.data !== "object") continue;
+    const record = entry.data as Partial<DecisionRecord>;
+    if (record.status !== "confirmed" || record.source !== "user") continue;
+    const grant = parseGrant(record.sessionGrant);
+    if (grant) grants = rememberGrant(grants, grant);
+  }
+  return grants;
+}
+
 export interface BlockResult {
   readonly block: true;
   readonly reason: string;
@@ -174,6 +198,7 @@ export function createInitialState(): GateState {
     policyNotes: "",
     scope: "global",
     recentUserApprovedCommands: [],
+    sessionGrants: [],
   };
 }
 
@@ -210,6 +235,7 @@ interface RecordInput {
   readonly rationale: string;
   readonly evidence?: EngineEvidence;
   readonly userApprovedCommand?: string;
+  readonly sessionGrant?: Grant;
 }
 
 function writeRecord(deps: DecisionDeps, input: RecordInput): void {
@@ -221,6 +247,7 @@ function writeRecord(deps: DecisionDeps, input: RecordInput): void {
     source: input.source,
     rationale: input.rationale,
     ...(input.userApprovedCommand === undefined ? {} : { userApprovedCommand: input.userApprovedCommand }),
+    ...(input.sessionGrant === undefined ? {} : { sessionGrant: input.sessionGrant }),
     ...(input.evidence?.conditions ? { conditions: input.evidence.conditions } : {}),
     ...(input.evidence?.decidingRule ? { decidingRule: input.evidence.decidingRule } : {}),
     ...(input.evidence?.clearedByIntent ? { clearedByIntent: input.evidence.clearedByIntent } : {}),
@@ -248,6 +275,9 @@ function blockReason(rationale: string): string {
 }
 
 const ALLOW_ONCE_CHOICE = "Allow once";
+const REMEMBER_EXACT_COMMAND_CHOICE = "This session: remember this exact command";
+const REMEMBER_GIT_PUSH_CHOICE = "This session: remember non-force git push";
+const REMEMBER_OUTSIDE_CWD_WRITE_CHOICE = "This session: remember outside-cwd write/edit to non-protected paths";
 const ALLOW_ALWAYS_GLOBAL_CHOICE = "Globally: Allow always (this exact command)";
 const ALLOW_ALWAYS_LOCAL_CHOICE = "Locally: Allow always (this exact command)";
 const LEGACY_ALLOW_ALWAYS_CHOICE = "Allow always (this exact command)";
@@ -257,10 +287,50 @@ type UserDecisionInput = RecordInput & {
   readonly originalSource: DecisionRecord["source"];
 };
 
-function userDecisionOptions(call: GatedCall): string[] {
+function labelForGrant(grant: Grant): string {
+  switch (grant.kind) {
+    case "exact-command":
+      return REMEMBER_EXACT_COMMAND_CHOICE;
+    case "git-push":
+      return REMEMBER_GIT_PUSH_CHOICE;
+    case "outside-cwd-write":
+      return REMEMBER_OUTSIDE_CWD_WRITE_CHOICE;
+  }
+}
+
+function sessionGrantMayResolve(call: GatedCall, reasons: readonly string[]): boolean {
+  if (call.protectedReason !== undefined) return false;
+  return !reasons.some((reason) =>
+    [
+      "reads a credential file",
+      "network upload of local data",
+      "file transfer to a remote host",
+      "raw network connection",
+      "downloaded script execution",
+    ].includes(reason),
+  );
+}
+
+function sessionGrantChoices(call: GatedCall, reasons: readonly string[]): Array<{ readonly label: string; readonly grant: Grant }> {
+  if (!sessionGrantMayResolve(call, reasons)) return [];
+  return grantProposalsForCall(call).map((grant) => ({ label: labelForGrant(grant), grant }));
+}
+
+function userDecisionOptions(call: GatedCall, reasons: readonly string[]): string[] {
+  const sessionChoices = sessionGrantChoices(call, reasons).map((choice) => choice.label);
   return call.command === undefined
-    ? [ALLOW_ONCE_CHOICE, BLOCK_CHOICE]
-    : [ALLOW_ONCE_CHOICE, ALLOW_ALWAYS_GLOBAL_CHOICE, ALLOW_ALWAYS_LOCAL_CHOICE, BLOCK_CHOICE];
+    ? [ALLOW_ONCE_CHOICE, ...sessionChoices, BLOCK_CHOICE]
+    : [
+        ALLOW_ONCE_CHOICE,
+        ...sessionChoices,
+        ALLOW_ALWAYS_GLOBAL_CHOICE,
+        ALLOW_ALWAYS_LOCAL_CHOICE,
+        BLOCK_CHOICE,
+      ];
+}
+
+function sessionGrantForChoice(call: GatedCall, reasons: readonly string[], choice: string | undefined): Grant | undefined {
+  return sessionGrantChoices(call, reasons).find((entry) => entry.label === choice)?.grant;
 }
 
 async function askUserToResolveBlock(
@@ -294,7 +364,7 @@ async function askUserToResolveBlock(
     rationale,
   })}\n\nThe automatic decision was: ${originalSource}. Choose how to proceed.`;
 
-  const choice = await ctx.ui.select(dialog, userDecisionOptions(call));
+  const choice = await ctx.ui.select(dialog, userDecisionOptions(call, reasons));
 
   // Backwards compatibility with older tests/configured UI shims that returned Yes/No.
   if (choice === ALLOW_ONCE_CHOICE || choice === "Yes") {
@@ -311,6 +381,27 @@ async function askUserToResolveBlock(
       source: "user",
       rationale: `The user allowed this call once. Original decision: ${rationale}`,
       evidence,
+      ...(call.command === undefined ? {} : { userApprovedCommand: call.command }),
+    });
+  }
+
+  const sessionGrant = sessionGrantForChoice(call, reasons, choice);
+  if (sessionGrant) {
+    state.sessionGrants = rememberGrant(state.sessionGrants, sessionGrant);
+    if (call.command !== undefined) {
+      state.recentUserApprovedCommands = rememberUserApprovedCommand(
+        state.recentUserApprovedCommands,
+        call.command,
+      );
+    }
+    return permit(deps, {
+      call,
+      reasons,
+      status: "confirmed",
+      source: "user",
+      rationale: `The user allowed this call and remembered ${describeGrant(sessionGrant)}. Original decision: ${rationale}`,
+      evidence,
+      sessionGrant,
       ...(call.command === undefined ? {} : { userApprovedCommand: call.command }),
     });
   }
@@ -428,6 +519,18 @@ export async function evaluateToolCall(
     );
     if (protectedReasons.length === 0) return undefined;
     reasons = protectedReasons;
+  }
+
+  const grantMatch = sessionGrantMayResolve(call, reasons) ? firstMatchingGrant(call, state.sessionGrants) : undefined;
+  if (grantMatch) {
+    return permit(deps, {
+      call,
+      reasons,
+      status: "allowed",
+      source: "grant",
+      rationale: grantMatch.rationale,
+      sessionGrant: grantMatch.grant,
+    });
   }
 
   // Without a key there is nothing to judge with. Ask the user instead of
@@ -683,7 +786,9 @@ export function register(pi: ExtensionAPI, options: RegisterOptions = {}): void 
     state.settings = loadedSettings.settings;
     state.scope = loadedSettings.scope;
     state.policyNotes = await store.loadPolicyNotes();
-    state.recentUserApprovedCommands = recentUserApprovedCommandsFromBranch(conversationBranch(ctx));
+    const branch = conversationBranch(ctx);
+    state.recentUserApprovedCommands = recentUserApprovedCommandsFromBranch(branch);
+    state.sessionGrants = sessionGrantsFromBranch(branch);
     if (applyFlag && pi.getFlag(AUTO_MODE_FLAG) === true) {
       state.settings = { ...state.settings, enabled: true };
     }
@@ -990,9 +1095,9 @@ export function register(pi: ExtensionAPI, options: RegisterOptions = {}): void 
   });
 
   pi.on("session_tree", async (_event, ctx) => {
-    state.recentUserApprovedCommands = recentUserApprovedCommandsFromBranch(
-      conversationBranch(toGateContext(ctx)),
-    );
+    const branch = conversationBranch(toGateContext(ctx));
+    state.recentUserApprovedCommands = recentUserApprovedCommandsFromBranch(branch);
+    state.sessionGrants = sessionGrantsFromBranch(branch);
   });
 
   pi.on("tool_call", async (event, ctx) => {
