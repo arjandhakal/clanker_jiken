@@ -13,6 +13,10 @@ A collection of experimental browser extensions, Pi extensions, and coding-agent
 - [`pi-review-room`](./pi-review-room) — a Herdr-native interactive review subagent with child-pane curation, per-finding handling notes, and explicit handoff to the parent agent.
 - [`pi-jev-auto-mode`](./pi-jev-auto-mode) — local fork of Jev-backed auto mode with allow-once / allow-always / block prompts.
 
+## Skill development
+
+- [`pi-skill-lab`](./pi-skill-lab) — use experimental skills and CLI tools on the real project while storing candidate assets outside the repo; promote selected assets into a new branch when ready.
+
 ## Safety extensions
 
 - [`pi-typesafe-guard`](./pi-typesafe-guard) — conservative human approval gates for shell, file mutation, GitHub, and custom-tool actions, with optional metadata-only TypeSafe risk signals and OS credential storage.

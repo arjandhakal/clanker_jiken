@@ -1,0 +1,13 @@
+{
+  "name": "pi-skill-lab",
+  "version": "0.1.0",
+  "description": "Use experimental skills and tools on a real project while storing candidate assets outside the repo, then promote selected files to a new branch.",
+  "type": "module",
+  "license": "MIT",
+  "keywords": ["pi-package", "pi", "extension", "skills"],
+  "pi": { "extensions": ["./extensions/index.ts"] },
+  "bin": { "pi-skill-lab": "./cli.mjs" },
+  "scripts": { "test": "node --test test/*.test.mjs" },
+  "engines": { "node": ">=20" },
+  "peerDependencies": { "@earendil-works/pi-coding-agent": "*" }
+}
