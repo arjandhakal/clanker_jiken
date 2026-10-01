@@ -47,6 +47,22 @@ test('Pi integration: whole skill tree loads, manual-only flags persist, real cw
       mode: 'print', onError: error => errors.push(error),
       commandContextActions: { waitForIdle: () => session.waitForIdle(), reload: () => session.reload() },
     });
+    await new SkillLab().create(cwd, 'picker-target');
+    let pickerRequest;
+    const baseUi = session.extensionRunner.getUIContext();
+    session.extensionRunner.setUIContext({
+      ...baseUi,
+      select: async (title, options) => {
+        pickerRequest = { title, options };
+        return options[0];
+      },
+    }, 'tui');
+    await session.prompt('/skill-lab');
+    assert.deepEqual(pickerRequest, {
+      title: 'Select a skill lab to activate',
+      options: ['picker-target  •  /skill:picker-target'],
+    });
+    assert.deepEqual(loader.getSkills().skills.map(skill => skill.name), ['picker-target']);
     await session.prompt('/skill-lab new smoke-candidate');
     assert.deepEqual(errors, []);
     assert.equal(loader.getSkills().skills.find(skill => skill.name === 'smoke-candidate')?.name, 'smoke-candidate');

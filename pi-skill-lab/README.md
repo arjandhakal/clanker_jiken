@@ -21,7 +21,11 @@ Requires Git, Node.js 20+, and Pi with `resources_discover` and mutable `tool_ca
 
 ## Workflow
 
-In your project's Pi session:
+Run `/skill-lab` with no arguments to open a searchable picker for this project's experiments. Each result shows the lab name, active state, and primary `/skill:<name>` command. Selecting a lab activates it and reloads resources.
+
+`/skill-lab use`, `/skill-lab status`, and `/skill-lab diff` also open the picker when their lab name is omitted. Explicit names remain available for scripts and non-interactive modes.
+
+To create the first experiment in your project's Pi session:
 
 ```text
 /skill-lab new project-maintenance

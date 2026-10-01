@@ -5,6 +5,14 @@ import { SkillLab, candidateInstructions, mappings, pathsFor, shellPrefix, split
 import { runCommand } from '../lib/commands.mjs';
 
 const SELECTION = 'skill-lab-selection';
+type LabChoice = { name: string; label: string };
+
+function labChoices(items: Array<{ name: string; primarySkill: string }>, activeName?: string): LabChoice[] {
+  return items.map(item => ({
+    name: item.name,
+    label: `${item.name}${item.name === activeName ? ' (active)' : ''}  •  /skill:${item.primarySkill}`,
+  }));
+}
 
 function skillsRootForLab(lab: { directory: string }) {
   return path.join(lab.directory, 'skills');
@@ -81,7 +89,25 @@ export default function skillLab(pi: ExtensionAPI) {
       let reload = false;
       try {
         await ctx.waitForIdle();
-        const result = await runCommand(labs, ctx.cwd, splitArgs(args), {
+        let commandArgs = splitArgs(args);
+        const pickerAction = commandArgs.length === 0 ? 'use' : commandArgs.length === 1 && ['use', 'status', 'diff'].includes(commandArgs[0]) ? commandArgs[0] : undefined;
+        if (pickerAction && ctx.hasUI) {
+          const choices = labChoices(await labs.list(ctx.cwd), active?.name);
+          if (!choices.length) {
+            ctx.ui.notify('No skill labs for this project. Use /skill-lab new <name>.', 'info');
+            return;
+          }
+          const titles: Record<string, string> = {
+            use: 'Select a skill lab to activate',
+            status: 'Select a skill lab to inspect',
+            diff: 'Select a skill lab to review',
+          };
+          const selected = await ctx.ui.select(titles[pickerAction], choices.map(choice => choice.label));
+          const choice = choices.find(item => item.label === selected);
+          if (!choice) return;
+          commandArgs = [pickerAction, choice.name];
+        }
+        const result = await runCommand(labs, ctx.cwd, commandArgs, {
           output: (content: string) => pi.sendMessage({ customType: 'skill-lab', content, display: true }),
           confirm: async (title: string, message: string) => {
             if (!ctx.hasUI) throw new Error('Promotion requires interactive confirmation. Use the standalone CLI with --yes after reviewing the diff.');

@@ -5,6 +5,7 @@ import { homedir } from "node:os";
 
 const STORE_VERSION = 1;
 const MAX_PREVIEW_CHARS = 160;
+const MAX_PICKER_PREVIEW_CHARS = 72;
 
 type LastPrompt = {
 	text: string;
@@ -116,6 +117,41 @@ function formatPromptList(prompts: SavedPrompt[]) {
 		.join("\n");
 }
 
+type PromptChoice = {
+	label: string;
+	prompt: SavedPrompt;
+};
+
+function promptChoices(prompts: SavedPrompt[]): PromptChoice[] {
+	return prompts
+		.slice()
+		.sort((a, b) => b.updatedAt - a.updatedAt)
+		.map((prompt, index) => ({
+			label: `${index + 1}. ${prompt.name}  •  ${preview(prompt.text, MAX_PICKER_PREVIEW_CHARS)}`,
+			prompt,
+		}));
+}
+
+async function pickPrompt(ctx: ExtensionCommandContext, title: string): Promise<SavedPrompt | undefined> {
+	const store = await readStore();
+	const choices = promptChoices(Object.values(store.prompts));
+	if (!choices.length) {
+		ctx.ui.notify("No saved prompts yet.", "info");
+		return undefined;
+	}
+	if (!ctx.hasUI) {
+		ctx.ui.notify("Choose a prompt by name in non-interactive mode.", "warning");
+		return undefined;
+	}
+	const selected = await ctx.ui.select(title, choices.map((choice) => choice.label));
+	return choices.find((choice) => choice.label === selected)?.prompt;
+}
+
+async function loadPromptIntoEditor(ctx: ExtensionCommandContext, prompt: SavedPrompt) {
+	ctx.ui.setEditorText(prompt.text);
+	ctx.ui.notify(`Loaded prompt “${prompt.name}” into the editor.`, "info");
+}
+
 async function getPromptNameCompletions(prefix: string) {
 	const store = await readStore();
 	const needle = prefix.trim().toLowerCase();
@@ -146,11 +182,12 @@ export default function promptSaverExtension(pi: ExtensionAPI) {
 	});
 
 	pi.registerCommand("save-prompt", {
-		description: "Save the last user prompt under a name. Usage: /save-prompt <name>",
+		description: "Save the last user prompt, asking for a name when omitted",
 		handler: async (args, ctx) => {
-			const name = normalizeName(args);
+			let name = normalizeName(args);
+			if (!name && ctx.hasUI) name = normalizeName((await ctx.ui.input("Save prompt", "Prompt name")) ?? "");
 			if (!name) {
-				ctx.ui.notify("Usage: /save-prompt <name>", "warning");
+				if (!ctx.hasUI) ctx.ui.notify("Usage: /save-prompt <name>", "warning");
 				return;
 			}
 
@@ -188,6 +225,18 @@ export default function promptSaverExtension(pi: ExtensionAPI) {
 		},
 	});
 
+	pi.registerCommand("prompts", {
+		description: "Browse saved prompts and load one into the editor",
+		handler: async (_args, ctx) => {
+			try {
+				const prompt = await pickPrompt(ctx, "Saved prompts");
+				if (prompt) await loadPromptIntoEditor(ctx, prompt);
+			} catch (err) {
+				ctx.ui.notify(err instanceof Error ? err.message : String(err), "error");
+			}
+		},
+	});
+
 	pi.registerCommand("saved-prompts", {
 		description: "List saved prompts. Usage: /saved-prompts [filter]",
 		handler: async (args, ctx) => {
@@ -211,16 +260,17 @@ export default function promptSaverExtension(pi: ExtensionAPI) {
 	});
 
 	pi.registerCommand("load-prompt", {
-		description: "Load a saved prompt into the editor. Usage: /load-prompt <name>",
+		description: "Load a saved prompt into the editor, opening a picker when omitted",
 		getArgumentCompletions: getPromptNameCompletions,
 		handler: async (args, ctx) => {
 			const name = normalizeName(args);
-			if (!name) {
-				ctx.ui.notify("Usage: /load-prompt <name>", "warning");
-				return;
-			}
 
 			try {
+				if (!name) {
+					const prompt = await pickPrompt(ctx, "Load saved prompt");
+					if (prompt) await loadPromptIntoEditor(ctx, prompt);
+					return;
+				}
 				const store = await readStore();
 				const prompt = store.prompts[name];
 				if (!prompt) {
@@ -228,8 +278,7 @@ export default function promptSaverExtension(pi: ExtensionAPI) {
 					return;
 				}
 
-				ctx.ui.setEditorText(prompt.text);
-				ctx.ui.notify(`Loaded prompt “${name}” into the editor.`, "info");
+				await loadPromptIntoEditor(ctx, prompt);
 			} catch (err) {
 				ctx.ui.notify(err instanceof Error ? err.message : String(err), "error");
 			}
@@ -237,16 +286,17 @@ export default function promptSaverExtension(pi: ExtensionAPI) {
 	});
 
 	pi.registerCommand("delete-prompt", {
-		description: "Delete a saved prompt. Usage: /delete-prompt <name>",
+		description: "Delete a saved prompt, opening a picker when omitted",
 		getArgumentCompletions: getPromptNameCompletions,
 		handler: async (args, ctx) => {
-			const name = normalizeName(args);
-			if (!name) {
-				ctx.ui.notify("Usage: /delete-prompt <name>", "warning");
-				return;
-			}
+			let name = normalizeName(args);
 
 			try {
+				if (!name) {
+					const prompt = await pickPrompt(ctx, "Delete saved prompt");
+					if (!prompt) return;
+					name = prompt.name;
+				}
 				const store = await readStore();
 				if (!store.prompts[name]) {
 					ctx.ui.notify(`No saved prompt named “${name}”.`, "warning");
