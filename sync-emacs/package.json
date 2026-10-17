@@ -1,0 +1,16 @@
+{
+  "name": "sync-emacs",
+  "version": "0.1.0",
+  "description": "Attach Emacs to existing Pi terminal sessions over private local sockets.",
+  "type": "module",
+  "license": "MIT",
+  "keywords": ["pi-package", "pi", "emacs"],
+  "files": ["extensions", "emacs", "README.md", "PROTOCOL.md"],
+  "pi": { "extensions": ["./extensions/index.ts"] },
+  "scripts": {
+    "test": "node --experimental-strip-types --test test/*.test.mjs",
+    "test:emacs": "emacs -Q --batch -L emacs -l test/sync-emacs-test.el -f ert-run-tests-batch-and-exit"
+  },
+  "peerDependencies": { "@earendil-works/pi-coding-agent": "*" },
+  "engines": { "node": ">=22.6" }
+}
