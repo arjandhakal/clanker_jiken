@@ -1,0 +1,9 @@
+node_modules/
+data/
+.env
+.env.*
+!.env.example
+auth.json
+mcp-auth.json
+*.log
+*.sqlite*

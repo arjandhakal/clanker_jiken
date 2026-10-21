@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pi Search</title>
+  <link rel="stylesheet" href="/style.css">
+  <link rel="search" type="application/opensearchdescription+xml" title="Pi Search" href="/opensearch.xml">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <main>
+    <header><a href="/" class="brand">π <span>search</span></a><span class="badge">LOCAL HOST · LIVE WEB</span></header>
+    <section class="intro"><h1>The web. Straight to the sources.</h1><p>Links and excerpts from Radius. No AI answer unless you ask.</p></section>
+    <form action="/search" method="get"><label for="query" class="sr-only">Search the web</label><input id="query" name="q" placeholder="What do you want to know?" required maxlength="2000" autocomplete="off"><button>Search ↗</button></form>
+    <div class="meta"><span id="status" role="status">Ready to explore.</span><a id="google" hidden rel="noreferrer">Try Google instead ↗</a></div>
+    <p id="error" role="alert"></p>
+    <div id="summary-controls" hidden><button id="summarize" type="button">Summarize with AI</button><small id="summary-note">Optional: sends these excerpts to your Pi model and uses AI tokens. Provider charges may apply.</small></div>
+    <section id="answer-section" hidden><div class="eyebrow">AI SUMMARY · CHECK THE SOURCES</div><div id="answer"></div></section>
+    <section id="sources-section" hidden><div class="eyebrow">WEB RESULTS</div><ol id="sources"></ol><p id="attribution"></p></section>
+    <section id="history-section"><div class="eyebrow">RECENT SEARCHES · THIS DEVICE</div><ul id="history"></ul></section>
+    <footer><p>Results by Radius/Parallel. AI summaries are optional and can be wrong.</p><details><summary>Browser setup & privacy</summary><p>Add a custom search engine named “Pi Search”, shortcut <code>pi</code>, URL:</p><code id="engine-url"></code><p>Chrome / Edge / Brave: Settings → Search engines → Site search → Add. Firefox: use the page's OpenSearch discovery (right-click the address bar → Add Pi Search, where supported). Safari has no arbitrary custom-engine setting; use a keyword-search extension.</p><p>Queries go to Radius/Parallel. The answer model is not called for ordinary searches; only clicking “Summarize with AI” sends the query and excerpts to it. Search-provider charges and retention policies still apply. Recent searches and transcripts are saved locally in data/search.sqlite. Local does not mean private from providers.</p><p>Completed searches are reused for 15 minutes. Opening a search URL runs it automatically; do not publish this service on your network.</p></details></footer>
+  </main>
+</body>
+</html>
