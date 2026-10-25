@@ -1,0 +1,83 @@
+{
+  "schema_version": 1,
+  "concepts": [
+    {
+      "id": "task",
+      "spec": "design/essence/concepts/task.md",
+      "requires_any": [],
+      "implementation": [
+        "model.clj"
+      ]
+    },
+    {
+      "id": "label",
+      "spec": "design/essence/concepts/label.md",
+      "requires_any": [
+        [
+          "task"
+        ]
+      ],
+      "implementation": [
+        "model.clj"
+      ]
+    }
+  ],
+  "synchronizations": [
+    {
+      "id": "clear-labels",
+      "spec": "design/essence/synchronizations/clear-labels.md",
+      "participants": [
+        "task.remove",
+        "label.clear"
+      ],
+      "implementation": [
+        "model.clj"
+      ]
+    }
+  ],
+  "traces": [
+    {
+      "id": "remove-labeled-task",
+      "spec": "design/essence/traces/remove-labeled-task.md",
+      "concepts": [
+        "task",
+        "label"
+      ],
+      "synchronizations": [
+        "clear-labels"
+      ],
+      "tests": [
+        "test_model.clj"
+      ]
+    },
+    {
+      "id": "failed-clear",
+      "spec": "design/essence/traces/failed-clear.md",
+      "concepts": [
+        "task",
+        "label"
+      ],
+      "synchronizations": [
+        "clear-labels"
+      ],
+      "tests": [
+        "test_model.clj"
+      ]
+    },
+    {
+      "id": "duplicate-request",
+      "spec": "design/essence/traces/duplicate-request.md",
+      "concepts": [
+        "task",
+        "label"
+      ],
+      "synchronizations": [],
+      "tests": [
+        "test_model.clj"
+      ]
+    }
+  ],
+  "mappings": [
+    "design/essence/mapping.md"
+  ]
+}

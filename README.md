@@ -19,6 +19,7 @@ A collection of experimental browser extensions, Pi extensions, and coding-agent
 
 ## Skill development
 
+- [`skills/essence-stack`](./skills/essence-stack) — eight cooperating skills for concept design, action synchronization, implementation, review, and design/code reconciliation.
 - [`pi-skill-lab`](./pi-skill-lab) — use experimental skills and CLI tools on the real project while storing candidate assets outside the repo; promote selected assets into a new branch when ready.
 
 ## Safety extensions
