@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>Context Lens · Pi</title>
+  <link rel="stylesheet" href="/style.css">
+  <script type="module" src="/app.js"></script>
+</head>
+<body>
+  <header class="app-header">
+    <div><p class="eyebrow">PI / CONTEXT LENS</p><h1>See what’s taking up context.</h1><p class="subtle">Local inspection. No content sent unless you approve AI analysis.</p></div>
+    <div class="header-actions"><span id="model" class="badge">Connecting to Pi…</span><button id="clear" class="quiet">Clear report</button></div>
+  </header>
+  <div id="error" class="notice error" role="alert" hidden></div>
+  <div class="status-bar"><p id="status" role="status" aria-live="polite">Connecting…</p><button id="cancel-job" hidden>Cancel operation</button></div>
+  <div class="workspace">
+    <aside class="sessions-panel" aria-labelledby="sessions-heading">
+      <div class="section-heading"><h2 id="sessions-heading">Sessions</h2><button id="refresh" class="quiet">Refresh</button></div>
+      <label for="search">Find a session</label><input id="search" type="search" placeholder="Name, project, date or model" maxlength="512" autocomplete="off">
+      <p id="session-count" class="subtle"></p><p class="fine">Metadata sampled; some names/models may be unavailable.</p>
+      <div id="session-list" class="session-list"></div>
+      <div class="pagination"><button id="previous" class="quiet">Previous</button><span id="page-label"></span><button id="next" class="quiet">Next</button></div>
+      <details id="discovery-notice" hidden><summary>Discovery warnings</summary><ul id="discovery-warnings"></ul></details>
+      <section class="selection-box" aria-labelledby="selected-heading"><h3 id="selected-heading">Selected <span id="selected-count">0 / 6</span></h3><ul id="selected-list"></ul>
+        <label for="scope">What should we inspect?</label><select id="scope"><option value="context">Retained context</option><option value="branch">Selected branch</option><option value="history">All branches</option></select><p id="scope-help" class="fine"></p>
+        <button id="inspect" class="primary" disabled>Inspect selected</button><p id="selection-help" class="fine">Select a session to begin. Up to six for comparison.</p>
+      </section>
+    </aside>
+    <main id="main">
+      <section id="empty" class="empty-state"><span class="empty-icon" aria-hidden="true">◫</span><h2>Your context, without the guesswork.</h2><p>Select one session to explore its composition, or several to compare.</p><p class="fine">Sources stay read-only. Estimates are not exact provider tokens or billed spend.</p></section>
+      <section id="report" hidden>
+        <div class="report-heading"><div><p class="eyebrow">LOCAL REPORT</p><h2 id="report-title"></h2><p id="report-description" class="subtle"></p></div><span class="badge">Local report</span></div>
+        <p id="pending" class="notice" hidden>Selection changed. Choose Inspect selected to update this report.</p>
+        <nav class="tabs" aria-label="Report sections"><button data-view="overview" aria-current="page">Overview</button><button data-view="compare">Compare</button><button data-view="growth">Growth</button><button data-view="evidence">Evidence</button><button data-view="details">Details</button><button data-view="analysis">Ask Pi</button></nav>
+        <div id="report-content"></div>
+        <section id="analysis-panel" hidden>
+          <div class="panel intro"><h3>Investigate with your Pi model</h3><p>Ask a question about a bounded sample—not an automatic analysis of every transcript.</p><p class="fine">Preparing a sample stays local. AI analysis sends the approved sample to the configured provider unless inference is actually local. Pi access does not establish Studist policy compliance.</p></div>
+          <form id="analysis-form" class="panel"><label for="question">What would you like to understand?</label><textarea id="question" maxlength="1000" rows="3" required placeholder="What evidence dominates, and where is work being repeated?"></textarea><label for="dimension">Look at</label><select id="dimension"><option value="usefulness">Useful evidence vs repetition</option><option value="sources">Context sources</option><option value="phases">Workflow phases</option><option value="recovery">Retries and recovery</option></select><div class="form-actions"><button id="prepare" class="primary" type="submit">Prepare sample</button><span id="analysis-help" class="fine">Nothing sent at this step.</span></div></form>
+          <div id="interpretation"></div>
+        </section>
+        <footer class="report-footer">Text units ≈ characters / 4. Growth is cumulative recorded text, not historic context-window occupancy. See Details for accounting limits.</footer>
+      </section>
+    </main>
+  </div>
+  <dialog id="evidence-dialog"><div class="dialog-heading"><h2>Local evidence</h2><button id="close-evidence" aria-label="Close evidence">Close</button></div><p id="evidence-meta" class="fine"></p><pre id="evidence-text"></pre></dialog>
+  <dialog id="preview-dialog"><div class="dialog-heading"><div><p class="eyebrow">NOTHING SENT YET</p><h2>Review your AI sample</h2></div><button id="close-preview">Cancel</button></div><div id="preview-content"></div><section class="approval"><p><strong>Transmission needs your approval.</strong> This configured provider must be approved for the information class of every selected session. Cross-project access is not transmission authorization; Pi does not establish Studist policy compliance. Virtual/custom routes may choose an underlying physical model.</p><label class="check-label"><input id="authorized" type="checkbox"> I am authorized to send this sample to the displayed provider for every selected session.</label><button id="approve" class="primary" disabled>Approve and analyze</button><p class="fine">One request, no automatic retries. You can cancel while it runs. Closing the page does not guarantee cancellation; use Cancel operation.</p></section></dialog>
+</body>
+</html>

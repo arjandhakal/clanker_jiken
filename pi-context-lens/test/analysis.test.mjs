@@ -60,9 +60,15 @@ test('cancellation and timeout abort underlying call and discard late results', 
   await assert.rejects(runAnalysis(plan(), { approved: true, timeoutMs: 5, invoke: async (_m, _ctx, options) => { timeoutSignal = options.signal; return new Promise(() => {}); } }), /timeout/);
   assert.ok(timeoutSignal.aborted);
 });
-test('runtime source has no new network/process/upload or conversation-persistence route', async () => {
+test('runtime routes are limited to loopback UI, fixed browser openers and the existing Pi model registry', async () => {
   const files = [...(await readdir(new URL('../lib/', import.meta.url))).map(f => new URL(`../lib/${f}`, import.meta.url)), ...(await readdir(new URL('../extensions/', import.meta.url))).map(f => new URL(`../extensions/${f}`, import.meta.url))];
   const source = (await Promise.all(files.map(f => readFile(f, 'utf8')))).join('\n');
-  assert.doesNotMatch(source, /\bfetch\s*\(|node:(?:https?|net|child_process)|\bspawn\s*\(|\bexec\s*\(|sendUserMessage\s*\(|sendMessage\s*\(|appendEntry\s*\(|SessionManager\.open\s*\(|getApiKey|auth\.json|writeFile\s*\(/);
+  assert.doesNotMatch(source.replaceAll('pi.exec(', 'browserOpener('), /\bfetch\s*\(|node:(?:https|net|child_process)|\bspawn\s*\(|\bexec\s*\(|sendUserMessage\s*\(|sendMessage\s*\(|appendEntry\s*\(|SessionManager\.open\s*\(|getApiKey|auth\.json|writeFile\s*\(/);
+  assert.deepEqual([...source.matchAll(/pi\.exec\('([^']+)'/g)].map(m => m[1]).sort(), ['open', 'rundll32', 'xdg-open']);
+  assert.match(source, /server\.listen\(0, '127\.0\.0\.1'/);
   assert.match(source, /ctx\.modelRegistry\.streamSimple/);
+  const browser = await readFile(new URL('../public/app.js', import.meta.url), 'utf8');
+  assert.doesNotMatch(browser, /innerHTML|outerHTML|eval\s*\(|localStorage|https?:\/\/(?!www\.w3\.org\/2000\/svg)/);
+  assert.match(browser, /sessionStorage/);
+  assert.match(browser, /Authorization: `Bearer/);
 });

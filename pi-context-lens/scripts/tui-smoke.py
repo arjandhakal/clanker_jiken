@@ -64,7 +64,7 @@ def run(mode):
         os.write(master, value.encode()); drain(.25)
     try:
         drain(4)
-        os.write(master, b'/context-lens\r')
+        os.write(master, b'/context-lens tui\r')
         wait('session selection')
         send('Smoke')
         # Picker now contains the two synthetic past sessions only.
@@ -89,7 +89,7 @@ def run(mode):
         returned = ANSI.sub('', output[return_start:].decode('utf-8', errors='replace'))
         assert 'Context Lens · Growth (3/6)' in returned, 'return from evidence lost active report tab'
         send('\x1b'); drain(.4)
-        os.write(master, b'/context-lens current\r'); drain(.5); send('\r'); drain(.7); send('\x1b')
+        os.write(master, b'/context-lens tui current\r'); drain(.5); send('\r'); drain(.7); send('\x1b')
         text = ANSI.sub('', output.decode('utf-8', errors='replace'))
         assert 'Compare' in text and 'Growth' in text, 'report tabs not observed'
         assert 'Side-by-side' in text, 'comparison not observed'

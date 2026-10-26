@@ -3,14 +3,18 @@ import { rootsFor, discover, snapshot, LIMITS, checkAbort } from '../lib/discove
 import { parseSnapshot, validateEntries, tipsOf, normalize, reportPages, largest, safe, title, CATEGORY_LABELS } from '../lib/core.mjs';
 import { DIMENSIONS, prepareAnalysis, runAnalysis, analysisPages } from '../lib/analysis.mjs';
 import { SessionPicker, ReportScreen, progress, type ReportState } from './ui.ts';
+import { startDashboard } from '../lib/web.mjs';
 
 export default function contextLens(pi: ExtensionAPI) {
   const controllers = new Set<AbortController>();
   let reports: any[] = [], selectionWarnings: string[] = [], aiPages: Record<string, any[]> = {}, busy = false;
+  let dashboard: Awaited<ReturnType<typeof startDashboard>> | undefined;
   pi.registerFlag('context-lens-roots', { type: 'string', description: 'Additional session roots separated by platform path delimiter (: on macOS/Linux)' });
+  pi.registerFlag('context-lens-no-open', { type: 'boolean', description: 'Print the private local dashboard link instead of opening a browser' });
   pi.on('session_shutdown', async () => {
     for (const c of controllers) c.abort(new Error('Session shutdown'));
     controllers.clear(); reports = []; aiPages = {};
+    await dashboard?.close(); dashboard = undefined;
   });
   const screen = (ctx: any, pages: Record<string, any[]>, actions = true, state?: ReportState, continueAction = false) => ctx.ui.custom((tui: any, theme: any, _kb: any, done: any) => new ReportScreen(pages, tui, theme, done, actions, state, continueAction));
 
@@ -24,6 +28,27 @@ export default function contextLens(pi: ExtensionAPI) {
     if (Buffer.byteLength(raw) > LIMITS.fileBytes) throw new Error('Current session exceeds 32 MiB memory snapshot limit');
     const warnings: string[] = [];
     return { header: structuredClone(header), entries: validateEntries(JSON.parse(raw), warnings), leafId, sourcePath: ctx.sessionManager.getSessionFile(), capturedAt: new Date().toISOString(), bytes: Buffer.byteLength(raw), warnings, name: ctx.sessionManager.getSessionName() || 'Current session' };
+  }
+
+  async function openDashboard(ctx: any, currentOnly: boolean) {
+    if (!dashboard) dashboard = await startDashboard({
+      roots: rootsFor(getAgentDir(), ctx.sessionManager.getSessionDir(), process.env.PI_CODING_AGENT_SESSION_DIR, String(pi.getFlag('context-lens-roots') || '')),
+      currentInfo: () => ({ id: ctx.sessionManager.getSessionId(), name: ctx.sessionManager.getSessionName() || 'Current session', cwd: ctx.cwd, path: ctx.sessionManager.getSessionFile(), model: ctx.model ? `${ctx.model.provider}/${ctx.model.id}` : undefined, modified: new Date().toISOString() }),
+      captureCurrent: () => captureCurrent(ctx), project: buildSessionProjection,
+      getModel: () => ctx.model,
+      invoke: (model: any, context: any, options: any) => ctx.modelRegistry.streamSimple(model, context, options).result()
+    });
+    const url = dashboard.url + (currentOnly ? '&current=1' : '');
+    if (!pi.getFlag('context-lens-no-open')) {
+      try {
+        // Fixed OS browser opener; the only argument is our generated loopback capability URL.
+        const result = process.platform === 'darwin' ? await pi.exec('open', [url], { timeout: 5000 })
+          : process.platform === 'win32' ? await pi.exec('rundll32', ['url.dll,FileProtocolHandler', url], { timeout: 5000 })
+          : await pi.exec('xdg-open', [url], { timeout: 5000 });
+        if (result.code === 0) { ctx.ui.notify('Context Lens opened in your browser. Inspection stays local; AI requires separate approval.', 'info'); return; }
+      } catch { /* Keep the listener available and offer a manual link. */ }
+    }
+    ctx.ui.notify(`Context Lens private local link (keep it private while Pi is running): ${url}`, 'info');
   }
 
   async function analyze(ctx: any) {
@@ -78,23 +103,31 @@ export default function contextLens(pi: ExtensionAPI) {
   }
 
   pi.registerCommand('context-lens', {
-    description: 'Local session composition/compare TUI; optional explicitly approved Pi-model investigation (current | clear)',
+    description: 'Open local HTML session dashboard; optional approved Pi-model investigation (current | tui [current] | clear)',
     handler: async (args, ctx) => {
       if (args.trim() === 'clear') {
         for (const c of controllers) c.abort(new Error('Context Lens cleared'));
         reports = []; aiPages = {}; selectionWarnings = [];
-        ctx.ui.notify('Context Lens memory cleared. Close any open screen with Esc.', 'info'); return;
+        await dashboard?.close(); dashboard = undefined;
+        ctx.ui.notify('Context Lens memory cleared; browser access revoked. Close any terminal screen with Esc.', 'info'); return;
       }
-      if (ctx.mode !== 'tui') { ctx.ui.notify('Context Lens requires interactive TUI mode. No sessions read or sent.', 'warning'); return; }
-      if (busy) { ctx.ui.notify('Context Lens is already open.', 'warning'); return; }
-      if (args.trim() && args.trim() !== 'current') { ctx.ui.notify('Usage: /context-lens [current|clear]', 'warning'); return; }
+      if (ctx.mode !== 'tui') { ctx.ui.notify('Context Lens requires interactive Pi mode. No sessions read or sent.', 'warning'); return; }
+      if (busy) { ctx.ui.notify('Context Lens terminal workflow is already open.', 'warning'); return; }
+      const command = args.trim().replace(/\s+/g, ' ');
+      if (!['', 'current', 'tui', 'tui current'].includes(command)) { ctx.ui.notify('Usage: /context-lens [current|tui [current]|clear]', 'warning'); return; }
+      if (!command.startsWith('tui')) {
+        try { await openDashboard(ctx, command === 'current'); }
+        catch (error: any) { ctx.ui.notify(safe(`Context Lens: ${error.message}. Use /context-lens tui as a fallback.`), 'error'); }
+        return;
+      }
+      const currentOnly = command === 'tui current';
       busy = true;
       try {
         const currentPath = ctx.sessionManager.getSessionFile();
         const current = { key: 'current:memory', current: true, path: currentPath, id: ctx.sessionManager.getSessionId(), name: ctx.sessionManager.getSessionName() || 'Current session', cwd: ctx.cwd, model: ctx.model ? `${ctx.model.provider}/${ctx.model.id}` : undefined, modified: new Date().toISOString() };
         let selected = [current];
         selectionWarnings = [];
-        if (args.trim() !== 'current') {
+        if (!currentOnly) {
           const roots = rootsFor(getAgentDir(), ctx.sessionManager.getSessionDir(), process.env.PI_CODING_AGENT_SESSION_DIR, String(pi.getFlag('context-lens-roots') || ''));
           const result: any = await progress(ctx, 'Discovering session metadata only…', (signal, update) => discover(roots, { signal, onProgress: update }), controllers);
           if (result.cancelled) return;

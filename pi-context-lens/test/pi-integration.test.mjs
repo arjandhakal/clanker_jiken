@@ -74,7 +74,7 @@ test('installed Pi loads extension; headless safe; current ephemeral TUI workflo
       component.dispose?.();
       return resolved;
     } }, 'tui');
-    await session.prompt('/context-lens current');
+    await session.prompt('/context-lens tui current');
     assert.ok(pages.some(p => p.Compare && p.Growth));
     assert.ok(pages.some(p => p['Local evidence']));
     assert.equal(modelCalls, 0);
@@ -118,7 +118,7 @@ test('installed Pi loads extension; headless safe; current ephemeral TUI workflo
         return currentUI.custom(factory);
       }
     }, 'tui');
-    await session.prompt('/context-lens current');
+    await session.prompt('/context-lens tui current');
     assert.ok(preview, JSON.stringify(notices)); assert.equal(confirmed, 1); assert.equal(modelCalls, 0);
     await t.test('Escape cancels AI sample preview without opening confirmation or invoking provider', async () => {
       actions.push('analyze', 'close');
@@ -138,7 +138,7 @@ test('installed Pi loads extension; headless safe; current ephemeral TUI workflo
         for (let i = 0; resolved === undefined && i < 100; i++) await new Promise(resolve => setTimeout(resolve, 1));
         component.dispose?.(); return resolved;
       } }, 'tui');
-      await session.prompt('/context-lens current');
+      await session.prompt('/context-lens tui current');
       assert.ok(cancelledPreview); assert.equal(confirmations, 0); assert.equal(modelCalls, 0);
       assert.deepEqual(session.sessionManager.getEntries(), before);
     });
@@ -166,7 +166,7 @@ test('installed Pi loads extension; headless safe; current ephemeral TUI workflo
         component.dispose?.(); return resolved;
       }
     }, 'tui');
-    await session.prompt('/context-lens current');
+    await session.prompt('/context-lens tui current');
     assert.ok(interpretationShown); assert.equal(modelCalls, 1);
     assert.deepEqual(session.sessionManager.getEntries(), before, 'even approved mocked analysis persists no text/results');
     // Escape from the actual progress component aborts a hanging mocked provider.
@@ -191,7 +191,7 @@ test('installed Pi loads extension; headless safe; current ephemeral TUI workflo
         component.dispose?.(); return resolved;
       }
     }, 'tui');
-    await session.prompt('/context-lens current');
+    await session.prompt('/context-lens tui current');
     assert.ok(cancelledSignal.aborted); assert.equal(modelCalls, 2);
     assert.match(notices.at(-1).text, /cancelled.*preserved/);
     assert.deepEqual(session.sessionManager.getEntries(), before);
@@ -226,8 +226,25 @@ test('installed Pi loads extension; headless safe; current ephemeral TUI workflo
       for (let i = 0; resolved === undefined && i < 100; i++) await new Promise(resolve => setTimeout(resolve, 1));
       component.dispose?.(); return resolved;
     } }, 'tui');
-    await session.prompt('/context-lens');
+    await session.prompt('/context-lens tui');
     assert.ok(pickerChecked); assert.equal(modelCalls, 2);
+    await t.test('browser command starts private local dashboard without opening a real browser; clear revokes it', async () => {
+      loader.getExtensions().runtime.flagValues.set('context-lens-no-open', true);
+      await session.prompt('/context-lens current');
+      const link = notices.at(-1).text.match(/http:\/\/127\.0\.0\.1:\d+\/#token=[A-Za-z0-9_-]+&current=1/)?.[0];
+      assert.ok(link, JSON.stringify(notices.at(-1)));
+      const url = new URL(link), token = new URLSearchParams(url.hash.slice(1)).get('token');
+      const headers = { Authorization:`Bearer ${token}`, Origin:url.origin, 'Content-Type':'application/json' };
+      const catalog = await (await fetch(url.origin+'/api/sessions',{headers})).json();
+      assert.equal(catalog.sessions.length,1); assert.ok(catalog.sessions[0].current);
+      await fetch(url.origin+'/api/report',{method:'POST',headers,body:JSON.stringify({keys:['current'],scope:'context'})});
+      let current;
+      for(let i=0;i<100;i++){current=await(await fetch(url.origin+'/api/state',{headers})).json();if(current.job.status!=='running')break;await new Promise(resolve=>setTimeout(resolve,2));}
+      assert.equal(current.report.sessions[0].name,'Current session'); assert.equal(modelCalls,2);
+      assert.deepEqual(session.sessionManager.getEntries(),before);
+      await session.prompt('/context-lens clear');
+      await assert.rejects(fetch(url.origin+'/api/state',{headers}));
+    });
     await session.prompt('/context-lens clear');
     assert.match(notices.at(-1).text, /memory cleared/);
     assert.deepEqual(errors, []);

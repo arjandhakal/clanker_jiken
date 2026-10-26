@@ -1,6 +1,6 @@
 # Pi Context Lens
 
-Inspect Pi session composition, growth and comparisons **inside Pi**. Local inspection requires no model call, external viewer, API key or context-lens executable. Optional AI investigation uses your active Pi provider/model route only, after preview and explicit approval.
+Inspect Pi session composition, growth and comparisons in a **local HTML dashboard opened from Pi**. Local inspection requires no model call, hosted viewer, API key or context-lens executable. Optional AI investigation uses your active Pi provider/model route only, after preview and explicit approval. The terminal interface remains available as a fallback.
 
 Tested with **Pi 1.2.0 / Node 24.22.1**. The local Homebrew directory named `0.75.4` contains 1.2.0; version numbers were verified against the running CLI and installed exports. Other versions are unverified, especially older forks without `buildSessionProjection` or registry streaming.
 
@@ -14,15 +14,27 @@ pi -e /Users/arjan.620/my-files/playground/clanker_jiken/pi-context-lens/extensi
 
 No settings changes or npm install are needed for the one-off command. To register it user-wide, run `pi install ./pi-context-lens`; it loads from this checkout. After source updates, use `/reload` in existing Pi sessions.
 
-## Interaction
+## Browser interaction
 
-1. Run `/context-lens`, or `/context-lens current` to skip discovery and inspect the active/ephemeral session.
-2. Search by available name, project/cwd, ID/path, date or model. **↑/↓** navigate, **Tab** toggles a checkbox, **Enter** inspects selected sessions (the highlighted item if none checked), **Esc** cancels. Selected names remain visible while filtering; **Ctrl+S** switches to a selected-only list for review/unchecking. Up to six sessions.
-3. Choose **Retained context**, **Selected branch** or **All branches**; each option explains what it includes. For a single branched session, optionally choose another branch.
-4. **←/→ or Tab** switches Overview / Compare / Growth / Contributors / Warnings / Details. Overview leads with size and dominant categories; Details holds full paths and accounting. **↑/↓, PgUp/PgDn, Home/End** scroll. **D** opens local evidence (top 30 contributors per session; preview capped at 16,000 chars). **Esc** returns to the same tab/scroll position. Current-page and action hints adapt to narrow terminals.
-5. Optional **A**: enter a question and choose a dimension. Review the readable **AI sample** and, optionally, the **Exact send preview** tab. **Enter Continue** opens explicit transmission approval; **Esc Cancel** returns to the report without opening approval or sending anything. **Esc** during inference aborts. No tool execution or project changes can result. The Interpretation tab retains the in-memory result while the report is open.
+1. Run `/context-lens` to open the dashboard in your default browser. `/context-lens current` opens the running/ephemeral session directly, without scanning history.
+2. Search by available name, project/cwd, ID/path, date or model. Check up to six sessions; the selected-session tray survives filtering and pagination. Choose **Retained context**, **Selected branch** or **All branches**, then **Inspect selected**.
+3. Explore **Overview** composition bars, **Compare** side-by-side totals, **Growth** charts and **Evidence** contributor details. **Details** contains provenance, branch selection and accounting limits. Growth charts display up to 300 checkpoints per session; full contributions still determine totals. Evidence text is previewed locally, capped at 16,000 characters.
+4. Optional **Ask Pi**: enter a question, choose a dimension, and **Prepare sample**. Nothing is sent yet. Review the readable snippets and expandable exact prompt. Acknowledge that the displayed provider is approved for every selected session's information class, then explicitly **Approve and analyze**. Cancel/close/Escape in the preview sends nothing.
+5. Use **Cancel operation** during discovery, inspection or inference. A cancelled/failed investigation leaves the completed local report intact; previous interpretations retain their original question label. No tool execution or project changes can result.
 
-`/context-lens clear` discards extension memory. Closing/reloading/exiting discards state eventually; no runtime cache or export is written. Opening a fresh report replaces the previous report/results. Commands requiring custom screens refuse headless/RPC mode without reading/sending sessions.
+**Clear report** aborts current work and drops inspection/preview/result data from server state and report DOM, while retaining catalog metadata for further selection. `/context-lens clear` additionally closes the listener and revokes all dashboard links. Closing the browser tab is **not** a guaranteed cancellation; cancel explicitly. Listener/data otherwise last until Pi shutdown/reload or clear. Headless/RPC commands refuse before reading sessions or starting a listener.
+
+For a manual link instead of automatic browser opening:
+
+```sh
+pi -e ./pi-context-lens/extensions/index.ts --context-lens-no-open
+```
+
+Then `/context-lens`; keep the printed access link private. On SSH, the browser must be able to reach the loopback port on the Pi host (for example through an explicitly configured SSH forward); no public binding is offered.
+
+### Terminal fallback
+
+Run `/context-lens tui` or `/context-lens tui current`. **↑/↓** navigate, **Tab** toggles selection, **Ctrl+S** reviews selected sessions and **Enter** inspects. In reports, **←/→ or Tab** changes sections, **↑/↓/PgUp/PgDn/Home/End** scrolls, **D** opens evidence and **A** prepares AI analysis. Returning from detail preserves position. Preview **Enter Continue** opens separate transmission approval; **Esc Cancel** exits preparation.
 
 ## What the reports mean
 
@@ -56,7 +68,9 @@ AI investigation is **sample-based**, not whole-transcript analysis: at most 24 
 
 Running inside Pi does **not** establish Studist policy compliance. A configured provider must be approved for the information class of **every** selected session. Reading cross-project files is not permission to transmit them.
 
-The extension does not append prompts/results to the ongoing Pi conversation or write duplicate transcripts/results. Selected text/results live in process memory until replaced/cleared/reload/exit. Original Pi transcripts, terminal scrollback, provider retention and host/provider diagnostics remain separate and are not controlled by this extension. Do not treat in-memory display as a guarantee against host logging or screenshots.
+The dashboard adds authenticated **loopback HTTP** (`127.0.0.1`, random port), not an internet endpoint. All assets are bundled; APIs require an unguessable capability, exact local Host and appropriate same-origin checks. No CORS, cookies, arbitrary filesystem route or browser-held model credentials. The access token starts in the URL fragment, is removed from history and kept in same-tab sessionStorage for reloads; only token/mode are stored there, never transcripts/results. Browser session restoration may retain tab storage; clear/reload/shutdown revokes the old server/token. Same-user malware or a compromised browser is outside this boundary.
+
+The extension does not append prompts/results to the ongoing Pi conversation or write duplicate transcripts/results. Selected material lives in Pi/browser memory until replaced/cleared/reload/exit. One dashboard inspection/job is shared by tabs connected to the same Pi listener; stale report/preview IDs and changed model routes are rejected. Original Pi transcripts, terminal scrollback, browser/host diagnostics and provider retention remain separate. Do not treat in-memory display as a guarantee against host logging or screenshots.
 
 ## Development and evidence
 
@@ -65,13 +79,15 @@ cd pi-context-lens
 npm test
 # Include installed-runtime projection/loader/UI orchestration tests:
 PI_SDK_PATH=/opt/homebrew/Cellar/pi-coding-agent/0.75.4/libexec/lib/node_modules/@earendil-works/pi-coding-agent/dist/index.js npm test
-# Isolated real terminal checks; no inference or private sessions:
+# Isolated real terminal fallback checks; no inference or private sessions:
 npm run test:tui
+# Synthetic browser fixture (mock model only); prints its private local URL:
+PI_SDK_PATH=/path/to/pi/dist/index.js npm run dev:browser
 ```
 
 Tests create only synthetic data under ignored `.tmp/`, and remove unit-test directories afterward. PTY smoke artifacts are retained under `.tmp/tui-*` for inspection; delete those directories when no longer needed. Public upstream research downloads are ignored under `research/`; neither directory is distributed in the package. No install scripts or paid inference are required. Runtime tests skip explicitly when the SDK is unavailable; a default unit-only pass is not evidence of installed-runtime compatibility.
 
-See [`VALIDATION.md`](VALIDATION.md) for actual results and unverified items, [`SPEC.md`](SPEC.md) for the implementation contract, and [`RESEARCH.md`](RESEARCH.md) for the read-only research handoff. Installed source validation found one stale-doc example: 1.2.0 context-edit replacements use `{content: ...}`, not a bare string.
+See [`VALIDATION.md`](VALIDATION.md) for actual results and unverified items, [`BROWSER_SPEC.md`](BROWSER_SPEC.md) for the approved browser/security contract, [`SPEC.md`](SPEC.md) for the original deterministic-core contract, and [`RESEARCH.md`](RESEARCH.md) for the initial research handoff. Pi Durable was investigated but is not required or installed: it supplies durable agent state, not an HTML renderer, and a second harness/store is unnecessary here. Installed source validation found one stale-doc example: 1.2.0 context-edit replacements use `{content: ...}`, not a bare string.
 
 ## Attribution
 

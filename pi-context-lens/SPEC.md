@@ -1,6 +1,6 @@
 # Pi Context Lens — implementation specification
 
-Status: implementation contract, written before code (2026-10-23); evidence/API corrections recorded during validation below.
+Status: original implementation contract, written before code (2026-10-23); evidence/API corrections recorded during validation below. **The approved [BROWSER_SPEC.md](BROWSER_SPEC.md) addendum now supersedes TUI-only/no-browser-listener assumptions and defines the default HTML interface.** The deterministic core and privacy/model constraints remain in force.
 
 ## 1. Scope and acceptance
 
