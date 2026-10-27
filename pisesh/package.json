@@ -1,0 +1,39 @@
+{
+  "name": "pisesh",
+  "version": "0.3.0",
+  "private": true,
+  "description": "Local pisesh fork: bookmark, search, and resume Pi sessions with /sesh.",
+  "type": "commonjs",
+  "license": "MIT",
+  "keywords": [
+    "pi-package",
+    "pi",
+    "extension",
+    "session"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/arjandhakal/clanker_jiken.git",
+    "directory": "pisesh"
+  },
+  "files": [
+    "bin/",
+    "extensions/",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=22.19"
+  },
+  "pi": {
+    "extensions": [
+      "./extensions/sesh.ts"
+    ]
+  },
+  "scripts": {
+    "test": "node --check bin/pisesh && node --test test/*.test.js"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*"
+  }
+}
