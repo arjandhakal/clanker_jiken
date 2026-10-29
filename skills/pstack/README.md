@@ -2,7 +2,9 @@
 
 Vendored from https://github.com/backnotprop/pstack for global Pi skill symlinks.
 
-Source commit: 157aae3 (`backnotprop/pstack` main).
+Source commit for the original skills: 157aae3 (`backnotprop/pstack` main).
+
+`principle-laziness-protocol` source commit: 25abb38559ddbabec563646224d09eff9a250eca.
 
 Included skills:
 
@@ -10,5 +12,6 @@ Included skills:
 - `how`
 - `why`
 - `unslop`
+- `principle-laziness-protocol` (manual invocation: `/skill:principle-laziness-protocol`)
 
 Global install uses symlinks from `~/.agents/skills/<name>` to the skill directories here.
