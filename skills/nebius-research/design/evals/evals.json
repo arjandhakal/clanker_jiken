@@ -1,0 +1,340 @@
+{
+  "skill_name": "design",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Use $design to plan adding total_count to list_items in evals/fixtures/catalog. The design document suggests replacing the result with a plain list; assess that approach against the implementation and keep the existing consumer working. Do not implement.",
+      "expected_output": "A code-grounded plan retaining the response envelope, reporting stale design prose and resolving the incompatible list proposal.",
+      "files": [
+        "evals/fixtures/catalog/README.md",
+        "evals/fixtures/catalog/consumer.py",
+        "evals/fixtures/catalog/docs/design.md",
+        "evals/fixtures/catalog/docs/requirements.md",
+        "evals/fixtures/catalog/service.py",
+        "evals/fixtures/catalog/test_catalog.py"
+      ],
+      "assertions": [
+        "Identifies docs/design.md as claiming a plain list and service.list_items as returning a dictionary containing items and next_cursor, with source references.",
+        "Uses implemented code as the current baseline and explains that a plain list would break consumer.export_ids.",
+        "Plans total_count within the envelope and regression coverage for the existing consumer and empty input, rather than modifying code to match stale prose.",
+        "Leaves all supplied files unchanged and returns a maintain-project-specs correction handoff instead of directly editing project documents."
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Use $design to plan total_count for the selected project evals/fixtures/catalog. A nearby project has its own design under evals/fixtures/neighbor. Keep the approved Python stack. Return only the plan.",
+      "expected_output": "A plan scoped to the catalog implementation rather than the neighboring XML design.",
+      "files": [
+        "evals/fixtures/catalog/README.md",
+        "evals/fixtures/catalog/consumer.py",
+        "evals/fixtures/catalog/docs/design.md",
+        "evals/fixtures/catalog/docs/requirements.md",
+        "evals/fixtures/catalog/service.py",
+        "evals/fixtures/catalog/test_catalog.py",
+        "evals/fixtures/neighbor/docs/design.md"
+      ],
+      "assertions": [
+        "Uses the catalog project design and service/consumer implementation as the relevant evidence; does not adopt the neighbor XML contract.",
+        "Reports the catalog document/code discrepancy and follows the implemented envelope.",
+        "Keeps technology choices fixed and leaves fixture files unchanged."
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Use $design to plan total_count in evals/fixtures/catalog. Only implementation files are available in this checkout. Preserve the existing consumer. Do not implement.",
+      "expected_output": "Bounded planning from available code with an explicit missing-design gap.",
+      "files": [
+        "evals/fixtures/catalog/service.py",
+        "evals/fixtures/catalog/consumer.py",
+        "evals/fixtures/catalog/test_catalog.py"
+      ],
+      "assertions": [
+        "Discloses that project design documentation is missing rather than claiming it was read.",
+        "Uses list_items and export_ids to plan an envelope-compatible addition and does not infer no users or greenfield status from missing docs.",
+        "Does not create design documents or modify implementation files."
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "Use $design to plan reliable identifier processing in evals/fixtures/prototype. This is an unused greenfield application: no users, no dependent consumers outside this prototype, and no persisted data. Identifiers can contain commas. Keep the fixed stack and do not implement.",
+      "expected_output": "A prerequisite refactor replacing a demonstrated lossy representation with a single canonical typed path, without shims.",
+      "files": [
+        "evals/fixtures/prototype/README.md",
+        "evals/fixtures/prototype/consumer.py",
+        "evals/fixtures/prototype/docs/design.md",
+        "evals/fixtures/prototype/service.py"
+      ],
+      "assertions": [
+        "Inspects and cites encode_ids and export_ids despite the greenfield label and identifies comma-containing identifiers as a concrete round-trip failure.",
+        "Proposes replacing the comma-string boundary with a lossless structured representation and updates all affected internal callers before dependent feature work.",
+        "Uses the explicit no-user context, adds no legacy aliases, wrappers or dual paths, and includes comma-containing and empty-identifier-list regression cases.",
+        "Leaves fixtures unchanged and supplies resulting design decisions to maintain-project-specs without writing documents."
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "Use $design to plan reliable identifier processing in evals/fixtures/prototype. Usage and downstream dependence are unknown. Can we discard the comma-string boundary? Do not implement.",
+      "expected_output": "A code-grounded finding with a usage question before assuming unused-greenfield refactor eligibility.",
+      "files": [
+        "evals/fixtures/prototype/README.md",
+        "evals/fixtures/prototype/consumer.py",
+        "evals/fixtures/prototype/docs/design.md",
+        "evals/fixtures/prototype/service.py"
+      ],
+      "assertions": [
+        "Explains the concrete delimiter bug with source references.",
+        "Does not infer unused status from the folder name, asks about users or dependent consumers, and marks the replacement decision unresolved while allowing independent analysis.",
+        "Does not silently introduce compatibility wrappers or claim the refactor is implementation-ready; all files remain unchanged."
+      ]
+    },
+    {
+      "id": 6,
+      "prompt": "Use $design to plan reliable identifier processing in evals/fixtures/prototype. Existing users import encode_ids and require its current public string contract to remain supported. Keep that commitment explicit and do not implement.",
+      "expected_output": "A plan honoring an explicit existing-user contract without invoking the unused-greenfield exception.",
+      "files": [
+        "evals/fixtures/prototype/README.md",
+        "evals/fixtures/prototype/consumer.py",
+        "evals/fixtures/prototype/docs/design.md",
+        "evals/fixtures/prototype/service.py"
+      ],
+      "assertions": [
+        "Recognizes existing consumers and the explicit string-contract commitment, and does not remove or change that supported interface without a decision.",
+        "Reports the delimiter defect, explains the contract-versus-correctness tradeoff and distinguishes an intentional future transition from current implemented behavior.",
+        "Does not treat code precedence as evidence that the defect is correct and does not modify fixtures."
+      ]
+    },
+    {
+      "id": 7,
+      "prompt": "Use $design to plan a lossless replacement for evals/fixtures/prototype. It has no users or outside consumers. For this exercise I explicitly request keeping encode_ids as a legacy compatibility wrapper for simple comma-free identifiers while new internal callers use a structured list. Do not implement.",
+      "expected_output": "A plan recognizing the explicit compatibility exception and keeping it limited to the requested boundary.",
+      "files": [
+        "evals/fixtures/prototype/README.md",
+        "evals/fixtures/prototype/consumer.py",
+        "evals/fixtures/prototype/docs/design.md",
+        "evals/fixtures/prototype/service.py"
+      ],
+      "assertions": [
+        "Acknowledges explicit authorization for the limited compatibility wrapper instead of treating the no-shim default as an absolute ban.",
+        "Plans one canonical lossless internal representation, explains the legacy wrapper limit, and covers comma-containing identifiers in the new path.",
+        "Does not infer implementation authority from the request for a plan; all supplied files remain unchanged."
+      ]
+    },
+    {
+      "id": 8,
+      "prompt": "Use $design to design and implement total_count in service.list_items in evals/fixtures/catalog. It must equal len(identifiers), including zero; preserve items, next_cursor and consumer.export_ids. Use only the existing Python standard-library stack, add focused tests and run them. This is a disposable local fixture; do not publish, commit or contact services.",
+      "expected_output": "Grounding and a scoped design followed by implementation and focused verification, with canonical documents retained for their owner.",
+      "files": [
+        "evals/fixtures/catalog/README.md",
+        "evals/fixtures/catalog/consumer.py",
+        "evals/fixtures/catalog/docs/design.md",
+        "evals/fixtures/catalog/docs/requirements.md",
+        "evals/fixtures/catalog/service.py",
+        "evals/fixtures/catalog/test_catalog.py"
+      ],
+      "assertions": [
+        "Reports the document/code discrepancy and preserves the implemented envelope and existing consumer.",
+        "Actually implements total_count and tests nonempty and empty input rather than stopping with a plan or asking for another routine implementation confirmation.",
+        "Runs focused local tests and reports their result without inventing unavailable specialist or spec-owner execution.",
+        "Leaves the supplied project design and requirements documents unchanged; routes their correction to maintain-project-specs or reports the pending handoff if unavailable.",
+        "Produces the plan without entering a write-prohibiting host mode that would prevent the already-authorized implementation; does not override a host-imposed restriction."
+      ]
+    },
+    {
+      "id": 9,
+      "prompt": "Use $design to plan total_count for evals/fixtures/catalog and save the corrected design document. I am requesting design only, not implementation.",
+      "expected_output": "Design output and a publication handoff to the canonical owner, without direct document edits.",
+      "files": [
+        "evals/fixtures/catalog/README.md",
+        "evals/fixtures/catalog/consumer.py",
+        "evals/fixtures/catalog/docs/design.md",
+        "evals/fixtures/catalog/docs/requirements.md",
+        "evals/fixtures/catalog/service.py",
+        "evals/fixtures/catalog/test_catalog.py"
+      ],
+      "assertions": [
+        "Reports code/document drift and produces an envelope-compatible plan.",
+        "Identifies maintain-project-specs as the canonical publication owner and does not directly edit the supplied project design document or requirements.",
+        "Makes no code, test or configuration changes and does not misread the request to save a design as implementation authority."
+      ]
+    },
+    {
+      "id": 10,
+      "prompt": "Use $design to plan a new small Python standard-library CLI called count-items and its README for engineers counting entries in local JSON arrays. No implementation or documentation exists yet. The proposed CLI takes the input file as a positional argument and prints the count; there are no services, credentials or environment variables. Keep the stack fixed. Return an adaptable README outline and one proposed quick-start example with input and expected output. Do not implement or write files.",
+      "expected_output": "A concise proposed README plan that explains purpose, prerequisites and the first successful local workflow without inventing existing implementation or unnecessary sections.",
+      "files": [],
+      "assertions": [
+        "Explains the purpose and audience, gives a concrete proposed quick-start input and command with an observable count, and identifies necessary runtime/setup prerequisites before that command.",
+        "Clearly labels the commands and behavior as proposed because no implementation exists; does not claim inspected code or completed command validation.",
+        "Adapts the outline to this small local tool: does not add empty configuration, deployment or architecture sections, and avoids repeating the introduction in an unnecessary Overview.",
+        "Does not invent support channels, a license, existing policy files or working documentation links; any proposed deeper-document destinations are identified as future work.",
+        "Leaves the workspace unchanged and produces a plan rather than implementing the CLI or writing a README."
+      ]
+    },
+    {
+      "id": 11,
+      "prompt": "Use $design to plan total_count in service.list_items in evals/fixtures/catalog and the corresponding README restructure for new users. total_count must equal the number of identifiers while preserving items, next_cursor and consumer.export_ids. Keep the existing standard-library stack. Include the first successful usage example, proposed section order and destinations for deeper documentation. Distinguish current behavior from the future feature, preserve useful existing setup/test information and do not implement or write files.",
+      "expected_output": "A code-grounded feature and README plan with useful navigation, a safe first-success example, deeper-document ownership and explicit current-versus-proposed behavior.",
+      "files": [
+        "evals/fixtures/catalog/README.md",
+        "evals/fixtures/catalog/consumer.py",
+        "evals/fixtures/catalog/docs/design.md",
+        "evals/fixtures/catalog/docs/requirements.md",
+        "evals/fixtures/catalog/service.py",
+        "evals/fixtures/catalog/test_catalog.py"
+      ],
+      "assertions": [
+        "Uses the implemented items/next_cursor envelope as current truth, reports conflicting design prose, and labels total_count as proposed rather than already available.",
+        "Places purpose and any necessary notice before navigation and quick start before deep architecture; includes only useful sections and avoids duplicating the introduction.",
+        "Specifies the working directory, Python prerequisite and a copyable first-success example consistent with the inspected functions, or clearly labels a future example and its required implementation; provides observable expected output.",
+        "Preserves the existing unittest command and consumer contract, uses relative links to actual documentation destinations, and routes correction of stale canonical design to maintain-project-specs rather than copying stale claims into the README.",
+        "Keeps the full architecture, API/configuration reference and runbook detail with their owners; does not invent unneeded configuration, support channels, license terms or policy files.",
+        "Makes no implementation or documentation writes and distinguishes checks actually performed from proposed validation."
+      ]
+    },
+    {
+      "id": 12,
+      "prompt": "Use $design to plan a standalone HTML guide explaining rainwater collection to adult community volunteers. It will be emailed as one file and opened offline on laptops or phones, sometimes with JavaScript disabled. No project or artifact exists yet. Use the shared theme and native HTML/CSS/SVG with small optional JavaScript. Organize an introduction, collection/storage/use relationships, practical examples and citations; plan optional navigation and explanations without forcing a slide deck. Do not create or modify files.",
+      "expected_output": "A general-document design with a shared warm-neutral theme, semantic reading baseline, portable single-file delivery, purposeful enhancement and explicit artifact verification.",
+      "files": [],
+      "assertions": [
+        "Selects the general-document profile with descriptive sections, examples, real contents/fragment links and references; does not impose fixed tabs, an inspector, a fixed section count or A3 pages.",
+        "Specifies one HTML file with embedded required styles, scripts, graphics and data, local system fonts, direct offline file opening, no automatic network or neighboring-file dependencies, and no localStorage correctness requirement; distinguishes followed citations from runtime dependencies.",
+        "Uses the shared warm-neutral background, white surfaces, dark slate text and restrained accents through semantic variables, with readable document typography and configurable category meanings rather than a blanket color-to-status mapping.",
+        "Preserves essential explanations in semantic HTML without JavaScript and provides a diagram relationship equivalent; optional disclosures and navigation retain keyboard access, visible focus, non-color cues and safe shortcuts.",
+        "Plans responsive reflow, contained two-dimensional scrolling and complete continuous printing; distinguishes design defaults from accessibility thresholds.",
+        "Includes all ten artifact acceptance areas and explicit renamed/relocated copy and attempted-request checks, without claiming offline, browser or print validation occurred.",
+        "Leaves the workspace unchanged, does not invent existing implementation and treats the approved native stack as fixed."
+      ]
+    },
+    {
+      "id": 13,
+      "prompt": "Use $design to plan an offline single-file HTML report of fictional support throughput for 2026-01-01 through 2026-03-31, generated 2026-04-02 UTC. Source: a supplied synthetic monthly export; units: tickets. January planned 100/completed 80; February planned 100/completed 60; March planned 100/completed missing. The report needs summary findings, evidence, implications, methodology, a month filter and reset. Identify trustworthy totals and completion rates without treating missing values as zero. Use the shared theme and fixed native HTML/CSS/SVG/JavaScript, keep essential content available without JavaScript, and plan the complete printable snapshot. There is no existing project or artifact. Do not implement or write files.",
+      "expected_output": "A report-profile design with accurate snapshot metadata, explicit missing-data semantics, consistent filter scope and complete offline/no-JavaScript/print requirements.",
+      "files": [],
+      "assertions": [
+        "Uses the report hierarchy of summary, findings, evidence, implications and methodology; shows reporting period, generation date, units, synthetic source, definitions and snapshot status without suggesting live data.",
+        "Identifies 140 known completed tickets across two observed months and a 70% completion rate for those months (140/200); does not assert a complete quarterly total or rate from missing March data and exposes coverage/denominator choices.",
+        "Shows active filter scope and reset, updates visible summary values consistently, and defines missing-data and empty-result behavior without equating missing values to zero.",
+        "Uses the shared warm-neutral palette, semantic configurable color roles and readable report typography; keeps essential findings and evidence in semantic HTML and provides text/table equivalents for meaningful charts.",
+        "Plans single-file direct offline opening with embedded dependencies, no automatic requests or neighboring files, portable state and safe serialization/text insertion; recognizes that hidden embedded data travels with the file.",
+        "Plans complete findings/evidence in print with explicit full-snapshot scope rather than only the filtered screen view, alongside keyboard, responsive and intended-browser checks.",
+        "Covers all ten artifact acceptance areas with independent data calculations, relocated/renamed file and attempted-network-request checks; distinguishes proposed checks from observed evidence and leaves files unchanged."
+      ]
+    },
+    {
+      "id": 14,
+      "prompt": "Use $design to plan a 10-minute standalone HTML presentation for engineers explaining how a request passes through intake, validation, scheduling and execution. There is no existing project or page. Use the shared visual theme and fixed native HTML/CSS/SVG/JavaScript. It will be projected at 1920x1080, read later on phones or with JavaScript disabled, and printed as a complete handout. Include optional component exploration, previous/next and presentation mode. Choose the narrative structure from the content; do not implement or write files.",
+      "expected_output": "A presentation-profile design with a coherent speaker narrative, shared theme, readable projection sizing, accessible optional controls and complete continuous/print fallbacks.",
+      "files": [],
+      "assertions": [
+        "Chooses a presentation profile with one principal message per view and a content-driven narrative; derives navigation counts, boundaries and default selections from its sections rather than hardcoding five tabs or inheriting an inspector.",
+        "Applies the shared theme, usually 20-28px projected body text, shorter text blocks and approximately 1.3-1.5 line height; reorganizes or splits dense content before shrinking text.",
+        "Specifies one portable HTML file with embedded required assets and data, local fonts, no automatic network or neighboring-file dependencies and state in memory/fragments without requiring localStorage.",
+        "Preserves the essential narrative and diagram relationships in readable semantic HTML without JavaScript, stacks supporting detail on phones, and maintains arrow meaning with a text equivalent or readable alternate diagram view.",
+        "Makes component exploration and previous/next keyboard-accessible, combines selection color with another cue, provides obvious presentation-mode exit, preserves deep/skip links and history, and avoids an unconditional global character-only shortcut.",
+        "Uses deliberate complete-print pagination and suitable orientation without forcing A3; includes details outside the selected view and keeps essential print content available without JavaScript.",
+        "Includes all ten artifact acceptance areas with the stated projection viewport, narrow layout/enlarged text, reduced motion, renamed/relocated files, attempted requests and actual-browser reporting; makes no validation or implementation claims and leaves the workspace unchanged."
+      ]
+    },
+    {
+      "id": 15,
+      "prompt": "Use $design to plan a fictional AI support product on Nebius. Incoming tickets need deterministic access checks, retrieval and a model response; ambiguous cases may need bounded dynamic investigation. Approval policy, AI components and application technologies are unsettled. Return the complete design and plan without implementation, credentials or live cloud discovery.",
+      "expected_output": "Scoped Nebius constraints, frozen AI behavior, one AI-component decision and surrounding application selection, with honest unavailable-skill fallback.",
+      "files": [],
+      "assertions": [
+        "Identifies the material nebius, ai-agent-design, ai-stack and app-stack scopes, or explicitly identifies unavailable specialists and applies the documented research fallback.",
+        "Uses provider constraints before finalizing dependent choices and separates documented support from unknown project capacity or availability.",
+        "Freezes AI behavior and policy before AI component selection and reuses any returned component decision as fixed input to app-stack rather than selecting it twice.",
+        "Keeps complete design ownership with design and distinguishes actual consultations from proposed or unavailable handoffs.",
+        "Does not implement, provision, configure authentication or demand credentials for documentation-only planning."
+      ]
+    },
+    {
+      "id": 16,
+      "prompt": "Use $design to plan retrieval integration into a fictional existing product. The application stack and AI behavior, authority and data contracts are approved and fixed. Only retrieval and model-serving components remain undecided. Do not implement.",
+      "expected_output": "Direct ai-stack consultation for the unresolved layer without reopening fixed agent or application decisions.",
+      "files": [],
+      "assertions": [
+        "Routes unresolved AI components directly to ai-stack or clearly reports its absence and bounded research fallback.",
+        "Preserves approved behavior and application technologies; does not start agent-topology design or unrelated application-stack selection.",
+        "Integrates the returned or evidence-backed fallback component decision with interfaces and acceptance checks in one design.",
+        "Does not claim an unavailable skill was invoked."
+      ]
+    },
+    {
+      "id": 17,
+      "prompt": "Use $design to plan a fictional reporting feature on Nebius. Python, PostgreSQL, all application components and deployment model are approved and fixed; there is no AI behavior. Nebius is also fixed. Check provider integration constraints from documentation only, with no credentials or project inventory.",
+      "expected_output": "Nebius advice remains applicable with a fixed provider while settled stack and AI scopes are skipped.",
+      "files": [],
+      "assertions": [
+        "Consults nebius or reports its absence and bounded research fallback despite the fixed provider.",
+        "Skips app-stack selection and both AI specialists with the appropriate fixed-stack or no-AI rationale.",
+        "Preserves fixed technologies and distinguishes provider evidence from project-specific capacity, quota and readiness.",
+        "Does not request credentials or run inventory, provisioning preflight or cloud actions merely for design."
+      ]
+    },
+    {
+      "id": 18,
+      "prompt": "Use $design to plan an automation someone has called an AI agent. Every step and transition is known: validate a record, request human approval, wait up to a month, execute a deterministic transformation and verify the result. No step needs model reasoning or generation. The runtime is already approved. Do not implement.",
+      "expected_output": "Deterministic-only capability classification and no unnecessary AI technology selection.",
+      "files": [],
+      "assertions": [
+        "Classifies the specified capabilities as deterministic despite the initial agent label and durable wait.",
+        "Does not select models or agent runtimes; records that no AI component is required.",
+        "Uses ai-agent-design only if classification actually requires resolution, with an honest fallback if unavailable.",
+        "Preserves the approved runtime and designs deterministic approval, recovery and verification boundaries."
+      ]
+    },
+    {
+      "id": 19,
+      "prompt": "Use $design to plan a fictional service with an unresolved application-stack choice. app-stack is unavailable in this environment. First use research for official vendor documentation; suppose a decision-relevant operational limitation has no official coverage but is discussed by an established maintainer community. Keep uncertain facts explicit and do not implement.",
+      "expected_output": "Research supplies ranked evidence for a design-owned fallback without fabricated specialist execution.",
+      "files": [],
+      "assertions": [
+        "Explicitly identifies app-stack as unavailable and requests bounded research rather than treating a description as specialist execution.",
+        "Uses research when available; if research is also unavailable, says so and applies the same hierarchy directly.",
+        "Prioritizes official vendor sources and consults reputable community sources for the stated coverage gap while labeling provenance and uncertainty.",
+        "Does not fabricate citations or treat community-only limitations as verified provider behavior; unresolved material facts limit readiness.",
+        "Keeps design synthesis with design and performs no implementation or external changes."
+      ]
+    },
+    {
+      "id": 20,
+      "prompt": "Use $design to plan a fictional non-AI scheduling application. The frontend, API and database technologies are undecided. It will run in a generic approved hosting environment; no Nebius services are involved. Provide the design and implementation plan without implementing.",
+      "expected_output": "Only the unresolved application stack is delegated, with unrelated AI and provider scopes skipped.",
+      "files": [],
+      "assertions": [
+        "Uses app-stack for surrounding application selection or explicitly identifies its absence and bounded research fallback.",
+        "Does not introduce AI behavior, model selection or Nebius provider requirements.",
+        "Keeps complete design synthesis with design and records skipped irrelevant specialist scopes.",
+        "Returns a plan without implementation or provisioning."
+      ]
+    },
+    {
+      "id": 21,
+      "prompt": "Use $design in report-only mode. Design a small SDK integration and return a bounded plan without implementation. Vendor documentation MCP tools are available in this session, and Tavily is also available. Describe the documentation lookup choices without external calls or file edits; read-only loading of this skill and its references is allowed.",
+      "expected_output": "Available vendor tools routing within the existing design workflow.",
+      "files": [],
+      "assertions": [
+        "Selects the available relevant vendor documentation tools first.",
+        "Does not mistake an operational MCP for a documentation source or run redundant Tavily queries.",
+        "Preserves higher-priority host rules, checks relevant versions and cites original official pages for retrieved claims.",
+        "Does not install integrations, repair authentication, use Context7 or include confidential content in public queries.",
+        "Retains the existing design output and scope boundaries."
+      ]
+    },
+    {
+      "id": 22,
+      "prompt": "Use $design in report-only mode. Design a small SDK integration and return a bounded plan without implementation. The vendor MCP appears in config but its tools are unavailable. Explain the route for a known official URL with Tavily available, then the case where Tavily authentication is unavailable. Describe the documentation lookup choices without external calls or file edits; read-only loading of this skill and its references is allowed.",
+      "expected_output": "Vendor and Tavily fallback routing within the existing design workflow.",
+      "files": [],
+      "assertions": [
+        "Uses Tavily Extract directly for the known official URL and Search scoped to official domains when discovery is needed.",
+        "Does not treat configured MCP as session availability; when Tavily cannot help, discloses the limitation and uses built-in official web retrieval.",
+        "Preserves higher-priority host rules, checks relevant versions and cites original official pages for retrieved claims.",
+        "Does not install integrations, repair authentication, use Context7 or include confidential content in public queries.",
+        "Retains the existing design output and scope boundaries."
+      ]
+    }
+  ]
+}

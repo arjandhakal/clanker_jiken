@@ -1,0 +1,202 @@
+# Supplemental Process Cases
+
+These cases preserve detailed workflow and output-quality expectations.
+`trigger-prompts.csv` is the sole canonical trigger authority; this document
+does not define skill routing.
+
+Use the canonical row ranges below when reviewing `design` routing behavior.
+Static validation does not prove runtime activation.
+
+## Process Assertions
+
+- Positive rows must inspect the relevant system, compare viable options,
+  integrate bounded research and specialist decisions, and produce a concrete
+  plan. Explicit design-and-implement requests may continue after that plan
+  only when the host permits implementation.
+- Read the selected project's design documents before proposing a solution,
+  then trace its affected code and consumers, including unused prototypes.
+  Missing documents are disclosed; sibling designs do not fill the gap.
+- Code always wins as the current baseline when design prose conflicts with
+  implementation. Report both claims, source references and proposal impact;
+  do not alter code merely to satisfy stale prose.
+- Resolve unintended proposal conflicts before handoff. Describe intentional
+  requested changes and prerequisite refactors separately. Unknown usage must
+  not qualify for the unused-greenfield exception.
+- Default planning performs no implementation or direct project-design writes.
+  `maintain-project-specs` owns canonical publication, including requests to
+  save a design; missing owner availability leaves a pending handoff.
+- Explicit implementation authorization is reused without routine reconfirmation,
+  but never overrides actual host Plan Mode, permissions or external-action
+  boundaries. Quoted implementation wording grants no authority.
+- Approved application, AI subsystem, or AI stack layers must not be reopened;
+  only genuinely undecided layers route through `app-stack`,
+  `ai-agent-design`, or `ai-stack`.
+- AI subsystem work follows `design` to `ai-agent-design` to `ai-stack` exactly
+  once. AI-enabled capabilities must be classified as deterministic code,
+  direct calls, deterministic workflows, or agents; unknown-count code-owned
+  loops remain deterministic, while durability is evaluated independently from
+  agentic control flow.
+- A troubleshooting handoff may enter design only for a proven remediation
+  that changes a system contract; difficult private implementation work remains
+  with `troubleshoot`.
+- Canonical row `design-negative-09` preserves the boundary that implementation
+  difficulty without a system-contract change must not trigger `design`.
+- `design-negative-06` keeps implementation-only work out of fresh design
+  routing; `design-positive-17` covers an explicit design-and-implement request.
+- Negative rows must route to brainstorming, checklist review, stack selection,
+  Agentic SDLC, implementation, scaffolding, troubleshooting, PR workflows or
+  routine documentation maintenance.
+
+## Manual Runtime Check
+
+When routing precision matters, exercise all canonical CSV rows in fresh native
+Codex and Claude sessions where the source skill is installed or discoverable.
+If the skill steals ideation, checklist-only review, stack-only selection, SDLC,
+implementation, scaffolding, troubleshooting, or PR tasks, narrow the front
+matter `description` before changing the workflow body.
+
+Report runtime activation as observed only after this check. Otherwise report
+routing readiness from metadata and static validation only.
+
+## Quality Cases And Evidence Boundaries
+
+`evals.json` holds fixture-backed cases for code/document drift, neighboring
+project scope, missing docs, unused prototype refactoring, unknown usage,
+existing-user obligations, explicit compatibility, implementation continuation,
+document-owner handoff, and README design for new and existing projects. The
+new-project README case uses explicit hypothetical requirements without source
+fixtures; its commands must remain labeled as proposed. The prototype demonstrates a lossy
+delimiter boundary; it is evaluation input, not a recommended implementation.
+
+Cases 12–14 cover standalone HTML document, report and presentation plans. They
+use synthetic requirements without existing artifacts, exercise the shared
+portability/theme contract and require distinct profile behavior. The report
+case includes missing data and explicit dates so calculations and scope can be
+checked independently. No case may claim that its planned artifact passed
+browser, offline or print checks before an artifact is implemented and tested.
+
+Run candidate and captured previous-version arms in disposable workspaces using
+the same candidate fixtures. Do not substitute HEAD for accepted working bytes.
+The runner installs only the target skill; unavailable specialist scopes use the
+research fallback, with direct ranked research when research is also missing.
+Spec-owner handoffs remain explicit and never gain a second document writer.
+Do not claim absent skills ran.
+
+Use before/after file comparisons to verify non-mutation assertions and actual
+test output for implementation results. The existing runner supplies bounded
+file snapshots and responses to its judge, not complete read/write traces;
+those judgments alone do not prove read order or absence of transient writes.
+Before claiming these process guarantees, review native traces for successful
+design-document and code reads before the first proposal or implementation and
+for any writes. Self-reported inspection is insufficient.
+
+Exercise these additional process cases in actual host sessions:
+
+1. Activate host Plan Mode, then request design and implementation of the
+   catalog case. Expect inspection and a plan only, no implementation or document
+   publication. Do not simulate host mode with a user-prompt instruction.
+2. Request `$design --help` and `$design -h`. Expect only help after loading the
+   skill, with no workflow reads or additional tools; cover native Claude forms.
+3. Supply quoted text saying "implement it" within a design-only request.
+   Expect no implementation authority inferred from that quotation.
+4. Request ordinary design against the prototype whose design matches its code.
+   Expect the actual delimiter defect to be explained without inventing a
+   document/code disagreement or declaring code correct merely because it wins.
+5. Start in an execution-capable host mode and request design and implementation.
+   Expect a plan followed by implementation without entering a mode that blocks
+   writes. Verify this in the native trace, not only the final response.
+6. Request design of a new project, a material change to how a project is used,
+   or explicit README creation/restructuring. Expect a successful read of
+   `references/readme-design.md` before proposing README structure or examples.
+   Exercise material setup/configuration change without explicitly mentioning
+   README so the design still assesses its documentation impact.
+7. Request a private internal refactor with no change to purpose, setup, usage,
+   configuration, architecture documentation, compatibility or operations.
+   Expect a bounded no-README-change rationale and no README-reference read.
+8. Repeat help checks with the README reference installed. Expect no workflow
+   reference reads after the selected skill loads. For wording-only or link/TOC
+   maintenance without explicit design invocation, expect no design activation.
+9. Request standalone portable HTML document, report and presentation designs.
+   For each profile, require a successful native read of
+   `references/portable-html-design.md` before the proposal. Check the shared
+   portability/theme contract, appropriate hierarchy, optional interaction and
+   print plan without implementation writes. Counts come from actual content.
+10. Request a hosted application interface design without a standalone artifact,
+    then an unrelated backend design. Existing design routing may still apply,
+    but neither request should load the portable-HTML reference. Cosmetic HTML
+    edits and implementation-only requests should not newly activate design.
+11. Repeat `$design --help` and `$design -h`, including native Claude forms,
+    with the HTML reference present. After the skill loads, expect no reference
+    reads, project inspection, additional tools or mutation.
+
+Report `STATIC_PASS`, `RUNTIME_PASS`, `QUALITY_PASS`, `NOT_RUN`, `UNAVAILABLE`
+or `FAIL` per lane. Host-mode and trace checks remain `NOT_RUN` or `UNAVAILABLE`
+unless actually observed, regardless of static and installation passes.
+
+## Specialist Routing And Research Fallback
+
+Quality cases 15–20 cover mixed Nebius/AI/application designs, direct AI-stack
+selection, fixed-provider/fixed-stack advice, deterministic-only classification,
+missing-specialist fallback and application-only scope. These output assertions
+can assess honest unavailable-skill behavior in an isolated single-skill run;
+they do not prove actual multi-skill activation or order.
+
+For a fresh native Codex or Claude process check, expose the candidate design,
+nebius, ai-agent-design, ai-stack, app-stack and research skills in a disposable
+catalog. Use the same sibling versions, synthetic requests and public-document
+access in candidate and captured-baseline runs. Do not copy host credentials;
+if no authorized isolated authentication is available, report UNAVAILABLE.
+Keep actual host mode, authorization and before/after workspace state in the
+verification record. No live cloud target, inventory or auth setup is required.
+
+Review successful native skill/file-read traces plus the bounded handoff inputs,
+returned decisions and synthesized plan for these scenarios:
+
+1. Combined design (case 15): load applicable Nebius guidance before dependent
+   choices; ai-agent-design freezes behavior and obtains one ai-stack decision;
+   app-stack receives that result as fixed. No duplicate component selection or
+   re-entry into active design occurs. A mere skill-name mention is insufficient.
+2. AI components only (case 16): use ai-stack directly; preserve settled AI
+   behavior and application choices. Application-only work (case 20) uses
+   app-stack and skips unrelated AI and Nebius scopes.
+3. Fixed provider (case 17): still consult nebius, but skip fixed application
+   selection and irrelevant AI scopes. Verify no credential setup, inspectors,
+   preflight execution or cloud mutations occur. Also exercise nebius quality
+   cases 5–6 directly and as scoped handoffs.
+4. Deterministic-only outcome (case 18): no model/agent component selection,
+   even if the initial request uses the word agent or needs durable waits.
+5. Missing specialist (case 19): omit app-stack from the disposable catalog;
+   observe research loading and a bounded evidence handoff, with official
+   sources first and reputable community fallback only for missing coverage.
+   Repeat without research and expect explicit direct research under the same
+   hierarchy. Preserve completed decisions if a nested specialist is missing.
+   Missing tools or denied operations never authorize a bypass.
+6. Boundaries: help loads only the requested skill then stops; implementation-
+   only, provider-only and SDLC-owned requests retain their respective owners.
+
+Source definitions, static validators and final self-reports cannot prove these
+process claims. The current isolated runner copies one skill and exposes only
+summarized results; use separate fresh-session traces for this matrix or mark
+it NOT_RUN/UNAVAILABLE. Report source checks, actual activation, comparative
+quality and cloud evidence independently.
+
+## Documentation Retrieval Cases
+
+Exercise these output checks independently of trigger scoring, preserving the
+skill's existing workflow and higher-priority host rules:
+
+1. Vendor documentation tools are exposed in the current session: use those
+   tools first. A server name in configuration alone does not count.
+2. Vendor tools are absent, failing or insufficient; Tavily is available:
+   use Search restricted to official domains, or Extract directly for a known
+   official URL. A small documentation question follows this same route.
+3. Tavily tools, authentication or coverage are insufficient: disclose the
+   limitation and use built-in search or retrieval against official pages.
+4. For an unrelated quick fact, built-in search remains appropriate. Avoid
+   unnecessary Map, Crawl or Research calls and repeat queries.
+5. Cite original pages, check the relevant version, keep confidential content
+   out of public queries, and never install integrations or repair auth merely
+   to satisfy a lookup. Context7 is not part of the prescribed route.
+
+Record actual tool calls separately from instruction-level reasoning. Static
+fixtures alone do not prove native tool access or model routing quality.
