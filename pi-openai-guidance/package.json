@@ -1,0 +1,24 @@
+{
+  "name": "pi-openai-guidance",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Model-aware OpenAI prompting guidance for Pi, adapted from official OpenAI documentation.",
+  "keywords": [
+    "pi-package"
+  ],
+  "pi": {
+    "extensions": [
+      "./extensions/index.ts"
+    ]
+  },
+  "scripts": {
+    "test": "node --experimental-strip-types --test test/*.test.mjs"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*"
+  },
+  "engines": {
+    "node": ">=22.18.0"
+  }
+}

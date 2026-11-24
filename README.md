@@ -9,6 +9,7 @@ A collection of experimental browser extensions, Pi extensions, and coding-agent
 ## Review and memory extensions
 
 - [`pi-observational-memory`](./pi-observational-memory) — tiered, subprocess-backed observational memory for long-running Pi sessions.
+- [`pi-openai-guidance`](./pi-openai-guidance) — model-aware OpenAI prompt guidance adapted from official GPT-6 / GPT-6.2 documentation.
 - [`pi-prompt-saver`](./pi-prompt-saver) — save the last user prompt by name and load saved prompts back into the editor.
 - [`pi-markdown-reader`](./pi-markdown-reader) — read local Markdown in a scrollable overlay without adding it to model context.
 - [`pi-review-room`](./pi-review-room) — a Herdr-native interactive review subagent with child-pane curation, per-finding handling notes, and explicit handoff to the parent agent.
